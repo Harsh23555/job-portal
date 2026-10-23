@@ -260,6 +260,9 @@ export default function ExternalApplyModal({ job, onClose, onSuccess, user, atsS
     setFullname(user.fullname || "");
     setEmail(user.email || "");
     setPhone(user.phoneNumber || "");
+    setYearsExp(user.profile?.yearsOfExperience || (user.yearsOfExperience ? String(user.yearsOfExperience) : ""));
+    setLinkedin(user.profile?.linkedinUrl || user.linkedinUrl || "");
+    setPortfolio(user.profile?.portfolioUrl || user.portfolioUrl || "");
 
     // Fetch AI cover letter & transition to review after delay
     const fillAndTransition = async () => {
