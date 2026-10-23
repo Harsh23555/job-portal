@@ -830,12 +830,19 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
   const [aiSearching, setAiSearching] = useState(false);
   const [aiSearchAnswer, setAiSearchAnswer] = useState(null);
   const [appStatusFilter, setAppStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("match");
   const abortControllerRef = useRef(null);
 
   const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
   const userId = savedUser._id || "";
   const userName = savedUser.fullname || "Candidate";
-  const hasResume = Boolean(savedUser.profile?.resumeMetadata?.fileId || savedUser.profile?.resume);
+  const hasResume = Boolean(
+    savedUser.profile?.resumeMetadata?.fileId ||
+    savedUser.profile?.resume ||
+    savedUser.profileConfirmed ||
+    savedUser.candidateProfile ||
+    resumeAnalysis
+  );
 
   // Fetch latest resume analysis
   useEffect(() => {
@@ -1202,49 +1209,92 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
     setSelectedFilters(nextFilters);
   };
 
-  const displayedJobs = jobs.filter((job) => {
-    const titleStr = (job.title || "").toLowerCase();
-    const compName = (job.company?.name || (typeof job.company === "string" ? job.company : "") || job.companyName || "").toLowerCase();
-    const locStr = (job.location || "").toLowerCase();
-    const descStr = (job.description || "").toLowerCase();
-    const q = searchQuery.toLowerCase().trim();
-
-    if (q) {
-      const matchSearch = titleStr.includes(q) || compName.includes(q) || locStr.includes(q) || descStr.includes(q);
-      if (!matchSearch) return false;
+  const getJobCardAts = (job) => {
+    if (job?.matchScore !== undefined && job?.matchScore !== null) {
+      return {
+        score: job.matchScore,
+        matched: job.matchedSkills || [],
+        missing: job.missingSkills || [],
+        totalMatched: (job.matchedSkills || []).length,
+        totalRequired: (job.matchedSkills || []).length + (job.missingSkills || []).length,
+        summaryMessage: job.explanation || "Calculated using RAG semantic matching",
+        status: "complete"
+      };
     }
+    const skills = extractJobSkills(job);
+    return calculateATSScore(combinedUserSkills, skills, hasResume, job);
+  };
 
-    if (selectedFilters.size > 0) {
-      let matchesFilter = true;
-      selectedFilters.forEach((f) => {
-        if (f === "Remote") {
-          const isRem = job.isRemote || locStr.includes("remote");
-          if (!isRem) matchesFilter = false;
-        }
-        if (f === "Engineering") {
-          const isEng = /(engineer|developer|frontend|backend|fullstack|software|architect|devops|data|sre|programmer|coder)/i.test(titleStr) ||
-            (job.category || "").toLowerCase().includes("engineer");
-          if (!isEng) matchesFilter = false;
-        }
-        if (f === "Full-time") {
-          const jt = (job.jobType || job.type || "").toLowerCase();
-          if (!jt.includes("full")) matchesFilter = false;
-        }
-        if (f === "₹10L+") {
-          if (getJobNumericSalary(job) < 1000000) matchesFilter = false;
-        }
-        if (f === "₹20L+") {
-          if (getJobNumericSalary(job) < 2000000) matchesFilter = false;
-        }
-      });
-      if (!matchesFilter) return false;
-    }
+  const displayedJobs = useMemo(() => {
+    const filtered = jobs.filter((job) => {
+      const titleStr = (job.title || "").toLowerCase();
+      const compName = (job.company?.name || (typeof job.company === "string" ? job.company : "") || job.companyName || "").toLowerCase();
+      const locStr = (job.location || "").toLowerCase();
+      const descStr = (job.description || "").toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
 
-    if (activeTab === "Saved") {
-      return savedIds.has(job._id || job.id);
-    }
-    return true;
-  });
+      if (q) {
+        const matchSearch = titleStr.includes(q) || compName.includes(q) || locStr.includes(q) || descStr.includes(q);
+        if (!matchSearch) return false;
+      }
+
+      if (selectedFilters.size > 0) {
+        let matchesFilter = true;
+        selectedFilters.forEach((f) => {
+          if (f === "Remote") {
+            const isRem = job.isRemote || locStr.includes("remote");
+            if (!isRem) matchesFilter = false;
+          }
+          if (f === "Engineering") {
+            const isEng = /(engineer|developer|frontend|backend|fullstack|software|architect|devops|data|sre|programmer|coder)/i.test(titleStr) ||
+              (job.category || "").toLowerCase().includes("engineer");
+            if (!isEng) matchesFilter = false;
+          }
+          if (f === "Full-time") {
+            const jt = (job.jobType || job.type || "").toLowerCase();
+            if (!jt.includes("full")) matchesFilter = false;
+          }
+          if (f === "₹10L+") {
+            if (getJobNumericSalary(job) < 1000000) matchesFilter = false;
+          }
+          if (f === "₹20L+") {
+            if (getJobNumericSalary(job) < 2000000) matchesFilter = false;
+          }
+        });
+        if (!matchesFilter) return false;
+      }
+
+      if (activeTab === "Saved") {
+        return savedIds.has(job._id || job.id);
+      }
+      return true;
+    });
+
+    // Sort jobs: Higher % match will be shown at the top by default
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "salary") {
+        const salA = getJobNumericSalary(a) || 0;
+        const salB = getJobNumericSalary(b) || 0;
+        if (salB !== salA) return salB - salA;
+      } else if (sortBy === "date") {
+        const dateA = new Date(a.postedAt || a.posted_date || a.createdAt || 0).getTime();
+        const dateB = new Date(b.postedAt || b.posted_date || b.createdAt || 0).getTime();
+        if (dateB !== dateA) return dateB - dateA;
+      } else {
+        // "match": Higher % match first!
+        const scoreA = getJobCardAts(a)?.score ?? 0;
+        const scoreB = getJobCardAts(b)?.score ?? 0;
+        if (scoreB !== scoreA) {
+          return scoreB - scoreA;
+        }
+      }
+
+      // Tie-breaker: latest posted date
+      const dateA = new Date(a.postedAt || a.posted_date || a.createdAt || 0).getTime();
+      const dateB = new Date(b.postedAt || b.posted_date || b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [jobs, searchQuery, selectedFilters, activeTab, savedIds, sortBy, combinedUserSkills, hasResume]);
 
   const totalPages = Math.ceil(displayedJobs.length / jobsPerPage);
   const startIndex = (currentPage - 1) * jobsPerPage;
@@ -1266,24 +1316,8 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
         status: "complete"
       };
     }
-    return calculateATSScore(combinedUserSkills, activeJobSkills, hasResume);
+    return calculateATSScore(combinedUserSkills, activeJobSkills, hasResume, activeJob);
   }, [activeJob, combinedUserSkills, activeJobSkills, hasResume]);
-
-  const getJobCardAts = (job) => {
-    if (job?.matchScore !== undefined && job?.matchScore !== null) {
-      return {
-        score: job.matchScore,
-        matched: job.matchedSkills || [],
-        missing: job.missingSkills || [],
-        totalMatched: (job.matchedSkills || []).length,
-        totalRequired: (job.matchedSkills || []).length + (job.missingSkills || []).length,
-        summaryMessage: job.explanation || "Calculated using RAG semantic matching",
-        status: "complete"
-      };
-    }
-    const skills = extractJobSkills(job);
-    return calculateATSScore(combinedUserSkills, skills, hasResume);
-  };
 
   const hasAppliedToActiveJob =
     activeJob &&
@@ -1653,6 +1687,33 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                         </button>;
     })}
                   </div>
+
+                  {/* Sort Controls */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, fontSize: "0.75rem", color: T.textMid }}>
+                    <span>Showing {displayedJobs.length} roles</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>Sort:</span>
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        style={{
+                          background: isDark ? "rgba(255,255,255,0.06)" : "#ffffff",
+                          color: T.text,
+                          border: `1px solid ${T.border}`,
+                          borderRadius: 8,
+                          padding: "3px 8px",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          outline: "none"
+                        }}
+                      >
+                        <option value="match">✨ Highest Match %</option>
+                        <option value="date">🕒 Newest First</option>
+                        <option value="salary">💰 Salary: High to Low</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 {
@@ -1739,10 +1800,11 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                             {cardAts.score !== null ? (
                               <span style={{
                                 fontSize: "0.72rem",
-                                fontWeight: 600,
-                                color: cardAts.score >= 70 ? T.green : (cardAts.score >= 40 ? T.orange : T.textDim),
-                                background: cardAts.score >= 70 ? T.greenDim : (cardAts.score >= 40 ? T.orange + "20" : (isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)")),
-                                padding: "3px 8px",
+                                fontWeight: 700,
+                                color: cardAts.score >= 70 ? T.green : (cardAts.score >= 40 ? T.orange : (isDark ? "#93c5fd" : "#2563eb")),
+                                background: cardAts.score >= 70 ? T.greenDim : (cardAts.score >= 40 ? T.orange + "20" : (isDark ? "rgba(59,130,246,0.15)" : "rgba(37,99,235,0.08)")),
+                                border: `1px solid ${cardAts.score >= 70 ? T.green + "40" : (cardAts.score >= 40 ? T.orange + "40" : (isDark ? "rgba(59,130,246,0.3)" : "rgba(37,99,235,0.2)"))}`,
+                                padding: "3px 9px",
                                 borderRadius: 12,
                                 display: "inline-flex",
                                 alignItems: "center",

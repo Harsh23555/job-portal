@@ -215,7 +215,22 @@ export function extractJobSkills(job) {
 export function extractUserSkills(user = {}, resumeAnalysis = null) {
   const skillsSet = new Set();
 
-  // 1. Profile skills
+  // 1. Candidate Profile skills (from onboarding wizard & profile confirmation)
+  const candidateSkills = user?.candidateProfile?.skills;
+  if (Array.isArray(candidateSkills)) {
+    candidateSkills.forEach((s) => {
+      if (typeof s === "string" && s.trim()) skillsSet.add(s.trim());
+    });
+  }
+
+  const softSkills = user?.candidateProfile?.softSkills;
+  if (Array.isArray(softSkills)) {
+    softSkills.forEach((s) => {
+      if (typeof s === "string" && s.trim()) skillsSet.add(s.trim());
+    });
+  }
+
+  // 2. Profile skills
   const profileSkills = user?.profile?.skills;
   if (Array.isArray(profileSkills)) {
     profileSkills.forEach((s) => {
@@ -227,7 +242,7 @@ export function extractUserSkills(user = {}, resumeAnalysis = null) {
     });
   }
 
-  // 2. AI Resume Analysis skills inventory
+  // 3. AI Resume Analysis skills inventory
   const analysisSkills = resumeAnalysis?.skills;
   if (analysisSkills && typeof analysisSkills === "object") {
     Object.values(analysisSkills).forEach((category) => {
@@ -242,11 +257,17 @@ export function extractUserSkills(user = {}, resumeAnalysis = null) {
     });
   }
 
+  if (Array.isArray(resumeAnalysis?.skills_and_technologies?.primary_skills)) {
+    resumeAnalysis.skills_and_technologies.primary_skills.forEach((s) => {
+      if (typeof s === "string" && s.trim()) skillsSet.add(s.trim());
+    });
+  }
+
   return Array.from(skillsSet);
 }
 
-/** Computes ATS skills match score and details. */
-export function calculateATSScore(userSkills = [], jobSkills = [], hasResume = true) {
+/** Computes ATS skills match score and details with title and domain alignment. */
+export function calculateATSScore(userSkills = [], jobSkills = [], hasResume = true, job = null) {
   if (!hasResume) {
     return {
       score: null,
@@ -271,7 +292,13 @@ export function calculateATSScore(userSkills = [], jobSkills = [], hasResume = t
     };
   }
 
-  if (!Array.isArray(jobSkills) || jobSkills.length === 0) {
+  // If jobSkills is empty, attempt extraction from job title/description
+  let effectiveJobSkills = Array.isArray(jobSkills) && jobSkills.length > 0 ? jobSkills : [];
+  if (effectiveJobSkills.length === 0 && job) {
+    effectiveJobSkills = extractJobSkills(job);
+  }
+
+  if (effectiveJobSkills.length === 0) {
     return {
       score: null,
       status: "no_job_requirements",
@@ -293,7 +320,7 @@ export function calculateATSScore(userSkills = [], jobSkills = [], hasResume = t
   const matched = [];
   const missing = [];
 
-  for (const jobReq of jobSkills) {
+  for (const jobReq of effectiveJobSkills) {
     const normReq = normalizeSkill(jobReq);
     if (!normReq) continue;
 
@@ -334,20 +361,43 @@ export function calculateATSScore(userSkills = [], jobSkills = [], hasResume = t
     };
   }
 
-  const score = Math.round((matched.length / totalRequired) * 100);
+  let rawScore = Math.round((matched.length / totalRequired) * 100);
+
+  // Check title and keyword overlap if job object is available
+  const jobTitle = (job?.title || "").toLowerCase();
+  const jobDesc = (job?.description || "").toLowerCase();
+  let titleBonus = 0;
+
+  for (const [normUserSkill, origSkill] of normalizedUserSkills.entries()) {
+    if (normUserSkill.length >= 3 && (jobTitle.includes(normUserSkill) || jobTitle.includes(origSkill.toLowerCase()))) {
+      titleBonus = Math.max(titleBonus, 25);
+      if (!matched.includes(origSkill)) {
+        matched.push(origSkill);
+      }
+    }
+  }
+
+  if (rawScore === 0 && titleBonus > 0) {
+    rawScore = titleBonus;
+  } else if (titleBonus > 0) {
+    rawScore = Math.min(98, rawScore + 10);
+  }
+
+  // Ensure minimum baseline score (10%) when candidate has an active profile
+  const score = Math.max(10, Math.min(99, rawScore));
 
   let status = "low_match";
   let summaryMessage = `Low match. ${missing.length} key required skill${missing.length > 1 ? "s are" : " is"} missing.`;
 
-  if (score === 100 && missing.length === 0) {
-    status = "full_match";
-    summaryMessage = "✨ You have all the matching skills for this position!";
-  } else if (score >= 70) {
+  if (score >= 80) {
     status = "high_match";
     summaryMessage = `Strong match! You meet ${matched.length} of ${totalRequired} required skills (${score}%).`;
-  } else if (score >= 40) {
+  } else if (score >= 45) {
     status = "partial_match";
     summaryMessage = `Moderate match. You meet ${matched.length} of ${totalRequired} required skills (${score}%).`;
+  } else {
+    status = "low_match";
+    summaryMessage = `Partial alignment (${score}% match). Some related technical competencies identified.`;
   }
 
   return {
@@ -360,3 +410,4 @@ export function calculateATSScore(userSkills = [], jobSkills = [], hasResume = t
     summaryMessage,
   };
 }
+
