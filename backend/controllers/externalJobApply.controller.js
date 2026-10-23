@@ -10,6 +10,7 @@ import axios from "axios";
 import { ExternalJobApplication } from "../models/externalJobApplication.model.js";
 import { ExternalJob } from "../models/externalJob.model.js";
 import { ResumeAnalysis } from "../models/resumeAnalysis.model.js";
+import { User } from "../models/user.model.js";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const LLM_MODEL = process.env.RAG_LLM_MODEL || "llama-3.3-70b-versatile";
