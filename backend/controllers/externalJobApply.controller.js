@@ -110,7 +110,13 @@ function generateFallbackCoverLetter(user, job, analysis) {
 
 export const applyToExternalJob = async (req, res, next) => {
   try {
-    const user = req.user;
+    let user = req.user;
+    const userId = user?._id || req.id;
+    // Load full profile from DB to ensure skills and bio are available for RAG application
+    if (userId) {
+      const dbUser = await User.findById(userId).select("-password").lean();
+      if (dbUser) user = { ...user, ...dbUser };
+    }
     const { id: externalJobId } = req.params;
     const {
       coverLetter: submittedCoverLetter,
