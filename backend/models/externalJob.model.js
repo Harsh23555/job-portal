@@ -6,7 +6,7 @@ const externalJobSchema = new mongoose.Schema(
     provider: {
       type: String,
       required: true,
-      enum: ["adzuna", "jooble"],
+      enum: ["adzuna", "jooble", "remotive"],
       lowercase: true,
       trim: true,
     },

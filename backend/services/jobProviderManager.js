@@ -1,5 +1,7 @@
 import { AdzunaJobProvider } from "../providers/AdzunaJobProvider.js";
 import { JoobleJobProvider } from "../providers/JoobleJobProvider.js";
+import { RemotiveJobProvider } from "../providers/RemotiveJobProvider.js";
+import { LinkedInJobProvider } from "../providers/LinkedInJobProvider.js";
 import { ExternalJob } from "../models/externalJob.model.js";
 import { SearchCache } from "../models/searchCache.model.js";
 import { RateLimiter } from "./rateLimiter.js";
@@ -16,6 +18,8 @@ export class JobProviderManager {
   _registerDefaultProviders() {
     this.registerProvider(new AdzunaJobProvider());
     this.registerProvider(new JoobleJobProvider());
+    this.registerProvider(new RemotiveJobProvider());
+    this.registerProvider(new LinkedInJobProvider());
   }
 
   /** Registers a provider instance. */
@@ -71,14 +75,21 @@ export class JobProviderManager {
 
     // 2. Target providers
     const targetProviders = [];
-    if (normalizedSource === "adzuna") {
-      const p = this.getProvider("adzuna");
-      if (p) targetProviders.push(p);
-    } else if (normalizedSource === "jooble") {
-      const p = this.getProvider("jooble");
-      if (p) targetProviders.push(p);
+    const knownProviders = ["adzuna", "jooble", "remotive", "linkedin", "internal"];
+    if (knownProviders.includes(normalizedSource) && normalizedSource !== "all") {
+      if (normalizedSource === "internal") {
+        // Will fall through to DB fallback below
+      } else {
+        const p = this.getProvider(normalizedSource);
+        if (p) targetProviders.push(p);
+      }
     } else {
-      targetProviders.push(...this.getAllProviders());
+      // "all" — query all non-unavailable configured providers
+      targetProviders.push(
+        ...this.getAllProviders().filter(
+          (p) => p.providerName !== "linkedin" || p.isConfigured()
+        )
+      );
     }
 
     // 3. Provider rate limits

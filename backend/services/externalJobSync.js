@@ -1,8 +1,10 @@
 import { ExternalJob } from "../models/externalJob.model.js";
 import { SyncState } from "../models/syncState.model.js";
+import { IngestionRun } from "../models/ingestionRun.model.js";
 import { jobProviderManager } from "./jobProviderManager.js";
 import { RateLimiter } from "./rateLimiter.js";
 import { deduplicateJobs } from "./jobDeduplicator.js";
+import { scheduleEmbeddingAfterSync } from "./embeddingScheduler.js";
 
 const DEFAULT_KEYWORDS = [
   "developer",
@@ -64,7 +66,7 @@ async function upsertJob(job) {
 }
 
 /** Runs external jobs sync cycle. */
-export async function syncExternalJobs({ force = false } = {}) {
+export async function syncExternalJobs({ force = false, triggeredBy = "scheduler" } = {}) {
   console.log("[externalJobSync] Starting sync cycle...");
 
   let state = await SyncState.findOne({ key: "external_job_sync" });
@@ -89,28 +91,66 @@ export async function syncExternalJobs({ force = false } = {}) {
     { $set: { status: "running", lastSyncStartedAt: new Date() } }
   );
 
+  const startedAt = new Date();
   const keywords = getSyncKeywords();
+
+  // Create IngestionRun record
+  let ingestionRun;
+  try {
+    ingestionRun = await IngestionRun.create({
+      startedAt,
+      status: "running",
+      triggeredBy,
+      keywords,
+    });
+  } catch (e) {
+    console.warn("[externalJobSync] Could not create IngestionRun:", e.message);
+  }
+
   let inserted = 0;
   let updated = 0;
   let unchanged = 0;
   let errors = 0;
+
+  // Per-provider tracking
+  const providerStats = {};
 
   const providers = jobProviderManager.getAllProviders().filter((p) => p.isConfigured());
 
   if (providers.length === 0) {
     console.warn("[externalJobSync] No external job providers configured. Sync skipped.");
     await SyncState.updateOne({ key: "external_job_sync" }, { $set: { status: "idle" } });
+
+    if (ingestionRun) {
+      await IngestionRun.updateOne(
+        { _id: ingestionRun._id },
+        { $set: { status: "completed", completedAt: new Date(), fatalError: "No providers configured." } }
+      );
+    }
+
     return { inserted: 0, updated: 0, errors: 0, skipped: true, reason: "no_providers_configured" };
+  }
+
+  // Init per-provider stats
+  for (const p of providers) {
+    providerStats[p.providerName] = {
+      provider: p.providerName,
+      inserted: 0, updated: 0, unchanged: 0, errors: 0, skipped: 0,
+      errorDetails: [],
+      startedAt: Date.now(),
+    };
   }
 
   for (const keyword of keywords) {
     for (const provider of providers) {
       const providerName = provider.providerName;
+      const stats = providerStats[providerName];
 
       // Rate limit budget check
       const budget = await RateLimiter.checkLimit(providerName);
       if (!budget.allowed) {
         console.warn(`[externalJobSync] Skipping keyword "${keyword}" on ${providerName}: ${budget.reason}`);
+        stats.skipped++;
         continue;
       }
 
@@ -121,14 +161,20 @@ export async function syncExternalJobs({ force = false } = {}) {
 
         for (const job of uniqueJobs) {
           const outcome = await upsertJob(job);
-          if (outcome === "inserted") inserted++;
-          else if (outcome === "updated") updated++;
-          else if (outcome === "unchanged") unchanged++;
-          else errors++;
+          if (outcome === "inserted") { inserted++; stats.inserted++; }
+          else if (outcome === "updated") { updated++; stats.updated++; }
+          else if (outcome === "unchanged") { unchanged++; stats.unchanged++; }
+          else {
+            errors++;
+            stats.errors++;
+            stats.errorDetails.push({ keyword, message: "upsert failed", code: "UPSERT_ERROR" });
+          }
         }
       } catch (err) {
         console.error(`[externalJobSync] Error syncing keyword "${keyword}" on ${providerName}:`, err.message);
         errors++;
+        stats.errors++;
+        stats.errorDetails.push({ keyword, message: err.message, code: err.code || "" });
       }
 
       // Delay between queries
@@ -137,6 +183,8 @@ export async function syncExternalJobs({ force = false } = {}) {
   }
 
   const completedAt = new Date();
+  const durationMs = completedAt.getTime() - startedAt.getTime();
+
   await SyncState.updateOne(
     { key: "external_job_sync" },
     {
@@ -148,9 +196,37 @@ export async function syncExternalJobs({ force = false } = {}) {
     }
   );
 
+  // Finalize IngestionRun
+  if (ingestionRun) {
+    const providerRunArray = Object.values(providerStats).map((s) => ({
+      ...s,
+      durationMs: Date.now() - s.startedAt,
+    }));
+
+    await IngestionRun.updateOne(
+      { _id: ingestionRun._id },
+      {
+        $set: {
+          status: "completed",
+          completedAt,
+          durationMs,
+          providers: providerRunArray,
+          totalInserted: inserted,
+          totalUpdated: updated,
+          totalUnchanged: unchanged,
+          totalErrors: errors,
+        },
+      }
+    );
+  }
+
   console.log(
     `[externalJobSync] Sync complete. inserted=${inserted} updated=${updated} unchanged=${unchanged} errors=${errors}`
   );
+
+  // Trigger embedding pass for newly synced jobs
+  scheduleEmbeddingAfterSync();
+
   return { inserted, updated, unchanged, errors, skipped: false };
 }
 
@@ -169,3 +245,4 @@ export function scheduleSyncLoop(intervalMs) {
     );
   }, interval);
 }
+

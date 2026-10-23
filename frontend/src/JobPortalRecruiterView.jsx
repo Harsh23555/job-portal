@@ -37,6 +37,7 @@ import { Button, Input, GlassCard, getRelativeTime } from "./JobPortal";
 import { formatSalaryDisplay } from "./utils/currency";
 import API from "./services/api";
 import { useTheme, ThemeToggle, T } from "./context/ThemeContext";
+import AdminDashboard from "./components/AdminDashboard";
 
 function RecruiterNavbar({ onSignOut, onOpenPostModal, userName = "Recruiter", activeTab, onTabChange }) {
   const { isDark } = useTheme();
@@ -57,10 +58,10 @@ function RecruiterNavbar({ onSignOut, onOpenPostModal, userName = "Recruiter", a
         </div>
 
         <div style={{ display: "flex", gap: 6, flex: 1 }}>
-          {["Dashboard", "Company Profile", "My Profile"].map((l) => {
+          {["Dashboard", "Company Profile", "Admin", "My Profile"].map((l) => {
     const isActive = activeTab === l;
     return <button key={l} onClick={() => onTabChange(l)} style={{ padding: "8px 14px", background: isActive ? T.surface : "transparent", border: "none", color: isActive ? T.text : T.textMid, fontSize: "0.875rem", fontWeight: isActive ? 500 : 400, cursor: "pointer", borderRadius: 8, fontFamily: T.font, transition: "all 0.2s" }}>
-                {l}
+                {l === "Admin" ? "🛡 Admin" : l}
               </button>;
   })}
         </div>
@@ -734,7 +735,7 @@ export function JobPortalRecruiterView({ onSignOut }) {
           {activeTab === "My Profile" ? <RecruiterProfileView onUserUpdate={(updatedUser) => {
     localStorage.setItem("user", JSON.stringify(updatedUser));
     setUserVer((v) => v + 1);
-  }} /> : activeTab === "Company Profile" ? <CompanyProfileView company={companies[0]} onUpdate={fetchData} /> : <main style={{ flex: 1, maxWidth: 1200, width: "100%", margin: "0 auto", padding: "40px 24px" }}>
+  }} /> : activeTab === "Company Profile" ? <CompanyProfileView company={companies[0]} onUpdate={fetchData} /> : activeTab === "Admin" ? <AdminDashboard /> : <main style={{ flex: 1, maxWidth: 1200, width: "100%", margin: "0 auto", padding: "40px 24px" }}>
               
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 32 }}>
                 <div>

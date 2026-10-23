@@ -13,7 +13,9 @@ import jobRoute from "./routes/job.route.js";
 import applicationRoute from "./routes/application.route.js";
 import externalJobRoute from "./routes/externalJob.route.js";
 import savedJobRoute from "./routes/savedJob.route.js";
+import adminRoute from "./routes/admin.route.js";
 import { scheduleSyncLoop } from "./services/externalJobSync.js";
+import { startEmbeddingScheduler } from "./services/embeddingScheduler.js";
 
 dotenv.config({});
 
@@ -102,6 +104,7 @@ app.use("/api/v1/application", applicationRoute);
 app.use("/api/v1/external-jobs", externalJobRoute);
 app.use("/api/jobs", externalJobRoute);
 app.use("/api/v1/saved-jobs", savedJobRoute);
+app.use("/api/v1/admin", adminRoute);
 
 // 404 handler for API routes
 app.use("/api", (req, res) => {
@@ -122,6 +125,8 @@ if (process.env.NODE_ENV !== "test") {
       console.log(`Server running at port ${PORT}`);
       // Background external job synchronization
       scheduleSyncLoop();
+      // Background embedding scheduler
+      startEmbeddingScheduler();
     });
   });
 }
