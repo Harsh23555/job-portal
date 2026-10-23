@@ -47,7 +47,7 @@ setInterval(() => {
 
 /** Returns sanitized user object. */
 function buildUserResponse(user) {
-  return {
+  const response = {
     _id: user._id,
     fullname: user.fullname,
     email: user.email,
@@ -55,6 +55,17 @@ function buildUserResponse(user) {
     role: user.role,
     profile: user.profile,
   };
+
+  // Include HR-specific fields for recruiter users
+  if (user.role === "recruiter") {
+    response.verificationStatus = user.verificationStatus || "pending";
+    response.designation = user.designation || "";
+    response.companyDetails = user.companyDetails || {};
+    response.rejectionReason = user.rejectionReason || null;
+    response.suspensionReason = user.suspensionReason || null;
+  }
+
+  return response;
 }
 
 /** Signs JWT token. */
