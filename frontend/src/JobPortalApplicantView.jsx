@@ -32,6 +32,8 @@ import API from "./services/api";
 import { useTheme, ThemeToggle, T } from "./context/ThemeContext";
 import JobDescriptionMarkup from "./components/JobDescriptionMarkup";
 import ExternalApplyModal from "./components/ExternalApplyModal";
+import CandidateOnboardingWizard from "./components/CandidateOnboardingWizard";
+import AutoApplyConfigModal from "./components/AutoApplyConfigModal";
 
 function Tag({ children, color, textColor }) {
   const { isDark } = useTheme();
@@ -42,7 +44,7 @@ function Tag({ children, color, textColor }) {
     </span>;
 }
 
-function ApplicantNavbar({ onSignOut, activeTab, onTabChange, userName = "Candidate" }) {
+function ApplicantNavbar({ onSignOut, activeTab, onTabChange, userName = "Candidate", onOpenAutoApply }) {
   const { isDark } = useTheme();
   const initials = userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -79,6 +81,29 @@ function ApplicantNavbar({ onSignOut, activeTab, onTabChange, userName = "Candid
 
         {/* Right Actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          {/* Auto-Apply Button */}
+          <button
+            onClick={onOpenAutoApply}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 13px",
+              background: "linear-gradient(135deg, rgba(124,106,247,0.18), rgba(74,222,128,0.12))",
+              border: `1px solid ${isDark ? "rgba(124,106,247,0.35)" : "rgba(109,90,230,0.3)"}`,
+              borderRadius: 8,
+              color: T.purple,
+              fontSize: "0.78rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              transition: "all 0.18s",
+            }}
+            title="Configure RAG Auto-Apply engine"
+          >
+            <Sparkles size={13} />
+            <span>⚡ Auto-Apply</span>
+          </button>
+
           {/* Theme Toggle */}
           <ThemeToggle />
 
@@ -154,6 +179,7 @@ function ApplicantNavbar({ onSignOut, activeTab, onTabChange, userName = "Candid
 }
 function ProfileView({
   onUserUpdate,
+  onLaunchOnboarding,
   externalError = "",
   externalSuccess = "",
   onClearExternal
@@ -169,6 +195,44 @@ function ProfileView({
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Privacy & Consent state
+  const [privacyLoading, setPrivacyLoading] = useState(false);
+  const [privacyMsg, setPrivacyMsg] = useState("");
+
+  const handleRevokeConsent = async () => {
+    if (!window.confirm("Are you sure you want to revoke data processing consent? Your candidate profile and vector embeddings will be deactivated, and job matching will pause.")) return;
+    setPrivacyLoading(true);
+    setPrivacyMsg("");
+    try {
+      const res = await API.post("/user/privacy/revoke-consent");
+      if (res.data?.success && res.data.user) {
+        onUserUpdate(res.data.user);
+        setPrivacyMsg("Data processing consent revoked. Job matching is paused.");
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || "Failed to revoke consent.");
+    } finally {
+      setPrivacyLoading(false);
+    }
+  };
+
+  const handleDeleteAllData = async () => {
+    if (!window.confirm("WARNING: Are you sure you want to permanently delete all your resume files, candidate profile data, and AI vector embeddings? This action cannot be undone.")) return;
+    setPrivacyLoading(true);
+    setPrivacyMsg("");
+    try {
+      const res = await API.delete("/user/privacy/delete-data");
+      if (res.data?.success && res.data.user) {
+        onUserUpdate(res.data.user);
+        setPrivacyMsg("All resume files, embeddings, and candidate profile data have been permanently erased.");
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || "Failed to delete candidate data.");
+    } finally {
+      setPrivacyLoading(false);
+    }
+  };
 
   // Resume Management State
   const [resumeActionLoading, setResumeActionLoading] = useState(false);
@@ -612,6 +676,131 @@ function ProfileView({
           </div>
         </div>
       </GlassCard>
+
+      {/* ─── Confirmed Candidate Profile & Semantic Preferences ─── */}
+      <GlassCard style={{ padding: 32, marginTop: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+          <div>
+            <h3 style={{ fontSize: "1.2rem", color: T.text, margin: "0 0 6px", fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+              <Sparkles size={18} color={T.purple} /> Confirmed Candidate Profile (AI Matching)
+            </h3>
+            <p style={{ color: T.textMid, fontSize: "0.82rem", margin: 0 }}>
+              Structured profile used for semantic RAG job matching, vector search, and truthful application tailoring.
+            </p>
+          </div>
+          <span style={{
+            padding: "4px 10px",
+            borderRadius: 12,
+            fontSize: "0.72rem",
+            fontWeight: 700,
+            background: savedUser.profileConfirmed ? T.greenDim : "rgba(250,204,21,0.12)",
+            color: savedUser.profileConfirmed ? T.green : T.yellow,
+            border: `1px solid ${savedUser.profileConfirmed ? T.green + "40" : "rgba(250,204,21,0.3)"}`
+          }}>
+            {savedUser.profileConfirmed ? "✓ Profile Confirmed" : "Confirmation Pending"}
+          </span>
+        </div>
+
+        {savedUser.candidateProfile ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, background: T.surface, padding: 16, borderRadius: 12, border: `1px solid ${T.border}` }}>
+              <div>
+                <span style={{ fontSize: "0.75rem", color: T.textDim, display: "block" }}>Primary Role</span>
+                <strong style={{ fontSize: "0.92rem", color: T.text }}>{savedUser.candidateProfile.currentTitle || "Not specified"}</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: "0.75rem", color: T.textDim, display: "block" }}>Experience</span>
+                <strong style={{ fontSize: "0.92rem", color: T.text }}>{savedUser.candidateProfile.experienceYears || 0} Years</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: "0.75rem", color: T.textDim, display: "block" }}>Workplace Setting</span>
+                <strong style={{ fontSize: "0.92rem", color: T.text, textTransform: "capitalize" }}>{savedUser.candidateProfile.remotePreference || "Any"}</strong>
+              </div>
+              <div>
+                <span style={{ fontSize: "0.75rem", color: T.textDim, display: "block" }}>Expected Salary</span>
+                <strong style={{ fontSize: "0.92rem", color: T.text }}>{savedUser.candidateProfile.expectedSalary ? `₹${savedUser.candidateProfile.expectedSalary.toLocaleString()}` : "Not specified"}</strong>
+              </div>
+            </div>
+
+            {savedUser.candidateProfile.skills?.length > 0 && (
+              <div>
+                <span style={{ fontSize: "0.78rem", color: T.textDim, display: "block", marginBottom: 6 }}>Verified Profile Skills</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {savedUser.candidateProfile.skills.slice(0, 15).map((s) => (
+                    <span key={s} style={{ padding: "3px 8px", background: isDark ? "rgba(124,106,247,0.15)" : "rgba(109,90,230,0.1)", border: `1px solid ${isDark ? "rgba(124,106,247,0.3)" : "rgba(109,90,230,0.2)"}`, borderRadius: 14, fontSize: "0.75rem", color: T.purple, fontWeight: 600 }}>
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 8 }}>
+              <Button size="sm" variant="outline" onClick={onLaunchOnboarding} icon={<Sparkles size={14} />}>
+                Edit Candidate Profile / Re-analyze Resume
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <Button size="sm" variant="primary" onClick={onLaunchOnboarding} icon={<Sparkles size={14} />}>
+              Launch Profile Confirmation Wizard
+            </Button>
+          </div>
+        )}
+      </GlassCard>
+
+      {/* ─── Privacy, Consent & GDPR Data Erasure ─── */}
+      <GlassCard style={{ padding: 32, marginTop: 24, border: `1px solid ${isDark ? "rgba(239,68,68,0.25)" : "rgba(239,68,68,0.2)"}` }}>
+        <h3 style={{ fontSize: "1.1rem", color: T.text, margin: "0 0 6px", fontWeight: 600 }}>
+          Privacy, Consent & Data Rights (GDPR)
+        </h3>
+        <p style={{ color: T.textMid, fontSize: "0.82rem", margin: "0 0 18px", lineHeight: 1.5 }}>
+          Your resume and personal details are processed exclusively for personalized job discovery and application preparation. You have full control over your data.
+        </p>
+
+        {privacyMsg && (
+          <div style={{ padding: "10px 14px", borderRadius: 8, background: T.greenDim, border: `1px solid ${T.green}40`, color: T.green, fontSize: "0.82rem", marginBottom: 16 }}>
+            {privacyMsg}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <button
+            onClick={handleRevokeConsent}
+            disabled={privacyLoading}
+            style={{
+              padding: "8px 16px",
+              background: isDark ? "rgba(250,204,21,0.1)" : "rgba(217,119,6,0.08)",
+              border: `1px solid ${isDark ? "rgba(250,204,21,0.3)" : "rgba(217,119,6,0.25)"}`,
+              borderRadius: 8,
+              color: T.yellow,
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor: privacyLoading ? "not-allowed" : "pointer",
+            }}
+          >
+            Revoke Data Processing Consent
+          </button>
+
+          <button
+            onClick={handleDeleteAllData}
+            disabled={privacyLoading}
+            style={{
+              padding: "8px 16px",
+              background: "rgba(239,68,68,0.1)",
+              border: "1px solid rgba(239,68,68,0.3)",
+              borderRadius: 8,
+              color: "#ef4444",
+              fontSize: "0.82rem",
+              fontWeight: 600,
+              cursor: privacyLoading ? "not-allowed" : "pointer",
+            }}
+          >
+            Permanently Delete All Candidate Data (Right to Erasure)
+          </button>
+        </div>
+      </GlassCard>
     </div>;
 }
 export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobConsumed }) {
@@ -636,6 +825,11 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
   const [resumeAnalysis, setResumeAnalysis] = useState(null);
   const [enrichingDesc, setEnrichingDesc] = useState(false);
   const [externalModalJob, setExternalModalJob] = useState(null);
+  const [isAutoApplyModalOpen, setIsAutoApplyModalOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [aiSearching, setAiSearching] = useState(false);
+  const [aiSearchAnswer, setAiSearchAnswer] = useState(null);
+  const [appStatusFilter, setAppStatusFilter] = useState("all");
   const abortControllerRef = useRef(null);
 
   const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -680,6 +874,29 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
     abortControllerRef.current = new AbortController();
 
     try {
+      // If user profile is confirmed, prioritize personalized RAG matching
+      if (savedUser.profileConfirmed) {
+        try {
+          const matchRes = await API.post(
+            "/external-jobs/match-resume",
+            { topK: 30 },
+            { signal: abortControllerRef.current.signal }
+          );
+          if (matchRes.data?.success && Array.isArray(matchRes.data.jobs) && matchRes.data.jobs.length > 0) {
+            setJobs(matchRes.data.jobs);
+            if (!activeJobId) {
+              setActiveJobId(matchRes.data.jobs[0]._id || matchRes.data.jobs[0].id);
+            }
+            setLastRefreshed(new Date());
+            setLoading(false);
+            setRefreshing(false);
+            return;
+          }
+        } catch (matchErr) {
+          console.warn("[fetchJobs] RAG match-resume notice:", matchErr.message);
+        }
+      }
+
       const endpoint = isManualRefresh ? "/job/get?refresh=true" : "/job/get";
       const res = await API.get(endpoint, { signal: abortControllerRef.current.signal });
       if (res.data?.success && Array.isArray(res.data.jobs)) {
@@ -716,6 +933,31 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handleAiSearch = async (customQuery = null) => {
+    const q = customQuery !== null ? customQuery : searchQuery;
+    if (!q || !q.trim()) {
+      setAiSearchAnswer(null);
+      fetchJobs();
+      return;
+    }
+
+    setAiSearching(true);
+    try {
+      const res = await API.post("/external-jobs/ai-search", { query: q.trim(), topK: 25 });
+      if (res.data?.success) {
+        if (res.data.answer) setAiSearchAnswer(res.data.answer);
+        if (Array.isArray(res.data.jobs) && res.data.jobs.length > 0) {
+          setJobs(res.data.jobs);
+          setActiveJobId(res.data.jobs[0]._id || res.data.jobs[0].id);
+        }
+      }
+    } catch (err) {
+      console.warn("AI search error:", err.message);
+    } finally {
+      setAiSearching(false);
     }
   };
 
@@ -1012,9 +1254,33 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
   };
   const activeJob = jobs.find((j) => (j._id || j.id) === activeJobId) || jobs[0];
   const activeJobSkills = useMemo(() => extractJobSkills(activeJob), [activeJob]);
-  const activeAts = useMemo(() => calculateATSScore(combinedUserSkills, activeJobSkills, hasResume), [combinedUserSkills, activeJobSkills, hasResume]);
+  const activeAts = useMemo(() => {
+    if (activeJob?.matchScore !== undefined && activeJob?.matchScore !== null) {
+      return {
+        score: activeJob.matchScore,
+        matched: activeJob.matchedSkills || [],
+        missing: activeJob.missingSkills || [],
+        totalMatched: (activeJob.matchedSkills || []).length,
+        totalRequired: (activeJob.matchedSkills || []).length + (activeJob.missingSkills || []).length,
+        summaryMessage: activeJob.explanation || "Calculated using RAG semantic matching",
+        status: "complete"
+      };
+    }
+    return calculateATSScore(combinedUserSkills, activeJobSkills, hasResume);
+  }, [activeJob, combinedUserSkills, activeJobSkills, hasResume]);
 
   const getJobCardAts = (job) => {
+    if (job?.matchScore !== undefined && job?.matchScore !== null) {
+      return {
+        score: job.matchScore,
+        matched: job.matchedSkills || [],
+        missing: job.missingSkills || [],
+        totalMatched: (job.matchedSkills || []).length,
+        totalRequired: (job.matchedSkills || []).length + (job.missingSkills || []).length,
+        summaryMessage: job.explanation || "Calculated using RAG semantic matching",
+        status: "complete"
+      };
+    }
     const skills = extractJobSkills(job);
     return calculateATSScore(combinedUserSkills, skills, hasResume);
   };
@@ -1060,48 +1326,57 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
 
   return <div className={isJobsTab ? "jobs-page-container" : ""} style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: T.bg, color: T.text }}>
       <ApplicantNavbar
-    onSignOut={onSignOut}
-    activeTab={activeTab}
-    onTabChange={(tab) => {
-      setActiveTab(tab);
-      if (tab === "My Applications") {
-        fetchApplications();
-      } else if (tab === "Saved") {
-        const savedArr = Array.from(savedIds);
-        if (savedArr.length > 0) {
-          setActiveJobId(savedArr[0]);
-        }
-      } else if (tab === "Browse Jobs") {
-        if (jobs.length > 0) {
-          setActiveJobId(jobs[0]._id);
-        }
-      }
-    }}
-    userName={userName}
-    key={userVer}
-  />
+        onSignOut={onSignOut}
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          if (tab === "My Applications") {
+            fetchApplications();
+          } else if (tab === "Saved") {
+            const savedArr = Array.from(savedIds);
+            if (savedArr.length > 0) {
+              setActiveJobId(savedArr[0]);
+            }
+          } else if (tab === "Browse Jobs") {
+            if (jobs.length > 0) {
+              setActiveJobId(jobs[0]._id);
+            }
+          }
+        }}
+        onOpenAutoApply={() => setIsAutoApplyModalOpen(true)}
+        userName={userName}
+        key={userVer}
+      />
       <AnimatePresence mode="wait">
         <motion.div
-    key={activeTab}
-    initial={{ opacity: 0, y: 10 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -10 }}
-    transition={{ duration: 0.22, ease: "easeInOut" }}
-    className={isJobsTab ? "jobs-motion-container" : ""}
-    style={{ flex: 1, display: "flex", flexDirection: "column", width: "100%", minHeight: 0 }}
-  >
-          {activeTab === "AI Resume Analyzer" ? <ResumeAnalyzerView /> : activeTab === "My Profile" ? <ProfileView
-    onUserUpdate={(updatedUser) => {
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-      setUserVer((v) => v + 1);
-    }}
-    externalError={linkError}
-    externalSuccess={linkSuccess}
-    onClearExternal={() => {
-      setLinkError("");
-      setLinkSuccess("");
-    }}
-  /> : activeTab === "My Applications" ? (
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.22, ease: "easeInOut" }}
+          className={isJobsTab ? "jobs-motion-container" : ""}
+          style={{ flex: 1, display: "flex", flexDirection: "column", width: "100%", minHeight: 0 }}
+        >
+          {activeTab === "AI Resume Analyzer" ? (
+            <ResumeAnalyzerView />
+          ) : activeTab === "My Profile" ? (
+            <ProfileView
+              onUserUpdate={(updatedUser) => {
+                localStorage.setItem("user", JSON.stringify(updatedUser));
+                setUserVer((v) => v + 1);
+              }}
+              onLaunchOnboarding={() => {
+                setActiveTab("Browse Jobs");
+                setShowOnboarding(true);
+              }}
+              externalError={linkError}
+              externalSuccess={linkSuccess}
+              onClearExternal={() => {
+                setLinkError("");
+                setLinkSuccess("");
+              }}
+            />
+          ) : activeTab === "My Applications" ? (
     // My Applications
     <div style={{ flex: 1, maxWidth: 1e3, width: "100%", margin: "40px auto", padding: "0 24px", fontFamily: T.font }}>
               <div style={{ marginBottom: 32 }}>
@@ -1228,6 +1503,16 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
     })}
                 </div>}
             </div>
+  ) : (!savedUser.profileConfirmed || showOnboarding) && activeTab === "Browse Jobs" ? (
+    <CandidateOnboardingWizard
+      user={savedUser}
+      onComplete={(updatedUser) => {
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+        setUserVer((v) => v + 1);
+        setShowOnboarding(false);
+        fetchJobs(true);
+      }}
+    />
   ) : (
     // Browse Jobs & Saved
     <div className="jobs-main-layout" style={{ display: "flex", flex: 1, maxWidth: 1440, width: "100%", margin: "0 auto", height: "calc(100vh - 64px)", minHeight: 0, overflow: "hidden" }}>
@@ -1247,25 +1532,57 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                       </span>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "center" }}>
-                    <Input
-                      icon={<Search size={15} />}
-                      placeholder="Search jobs..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      wrapStyle={{ flex: 1 }}
-                    />
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+                    <div style={{ flex: 1 }}>
+                      <Input
+                        icon={<Search size={15} />}
+                        placeholder="Search jobs or ask AI (e.g. 'Remote Python > ₹10L')..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleAiSearch()}
+                        wrapStyle={{ width: "100%" }}
+                      />
+                    </div>
+                    <button
+                      onClick={() => handleAiSearch()}
+                      disabled={aiSearching}
+                      title="Conversational AI RAG Search"
+                      style={{
+                        height: 42,
+                        padding: "0 14px",
+                        background: "linear-gradient(135deg, rgba(124,106,247,0.22), rgba(74,222,128,0.18))",
+                        border: `1px solid ${isDark ? "rgba(124,106,247,0.35)" : "rgba(109,90,230,0.3)"}`,
+                        borderRadius: 10,
+                        color: T.purple,
+                        cursor: aiSearching ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: "0.78rem",
+                        fontWeight: 700,
+                        fontFamily: T.font,
+                        flexShrink: 0,
+                        transition: "all 0.18s",
+                      }}
+                    >
+                      {aiSearching ? (
+                        <RotateCw size={14} style={{ animation: "spin 1s linear infinite" }} />
+                      ) : (
+                        <Sparkles size={14} />
+                      )}
+                      <span>AI Search</span>
+                    </button>
                     <button
                       onClick={() => fetchJobs(true)}
                       disabled={refreshing}
                       title="Refresh job listings"
                       style={{
                         height: 42,
-                        padding: "0 14px",
+                        padding: "0 12px",
                         background: refreshing ? T.surfaceHov : T.surface,
-                        border: `1px solid ${T.purpleL}44`,
+                        border: `1px solid ${T.border}`,
                         borderRadius: 10,
-                        color: T.purpleL,
+                        color: T.textMid,
                         cursor: refreshing ? "not-allowed" : "pointer",
                         display: "flex",
                         alignItems: "center",
@@ -1278,9 +1595,28 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                       }}
                     >
                       <RotateCw size={14} style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }} />
-                      <span className="hidden sm:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
                     </button>
                   </div>
+
+                  {aiSearchAnswer && (
+                    <div
+                      style={{
+                        padding: "12px 16px",
+                        background: isDark ? "rgba(124,106,247,0.12)" : "rgba(109,90,230,0.08)",
+                        border: `1px solid ${isDark ? "rgba(124,106,247,0.3)" : "rgba(109,90,230,0.25)"}`,
+                        borderRadius: 12,
+                        marginBottom: 14,
+                        fontSize: "0.85rem",
+                        lineHeight: 1.5,
+                        color: T.text,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, color: T.purple, fontWeight: 700, marginBottom: 4 }}>
+                        <Sparkles size={14} /> Grounded AI Search Summary:
+                      </div>
+                      <div>{aiSearchAnswer}</div>
+                    </div>
+                  )}
                   <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
                     {["Remote", "Engineering", "Full-time", "₹10L+", "₹20L+"].map((f) => {
       const isSel = selectedFilters.has(f);
@@ -1704,11 +2040,11 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                       </div>
                     )}
 
-                    {/* ATS Skills Match Analysis */}
+                    {/* ATS & Semantic Match Analysis */}
                     <div style={{ background: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px solid ${T.border}`, borderRadius: 12, padding: 18, marginBottom: 32 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
                         <h3 style={{ fontSize: "0.95rem", color: T.text, margin: 0, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                          📊 ATS Skills Match Analysis
+                          📊 ATS & Semantic Match Analysis
                         </h3>
                         {activeAts.score !== null && (
                           <span style={{ fontSize: "0.8rem", fontWeight: 700, color: activeAts.score >= 70 ? T.green : (activeAts.score >= 40 ? T.orange : T.textDim) }}>
@@ -1716,6 +2052,33 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                           </span>
                         )}
                       </div>
+
+                      {/* Transparent explanation if returned by backend matching */}
+                      {activeJob?.explanation && (
+                        <div style={{
+                          marginBottom: 12,
+                          padding: "10px 14px",
+                          borderRadius: 8,
+                          background: isDark ? "rgba(124,106,247,0.08)" : "rgba(109,90,230,0.05)",
+                          border: `1px solid ${isDark ? "rgba(124,106,247,0.2)" : "rgba(109,90,230,0.15)"}`,
+                          fontSize: "0.82rem",
+                          lineHeight: 1.5,
+                          color: T.text
+                        }}>
+                          <div style={{ fontWeight: 600, color: T.purpleL, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                            <Sparkles size={14} />
+                            <span>Why this job matches your profile:</span>
+                          </div>
+                          <div>{activeJob.explanation}</div>
+                          {Array.isArray(activeJob.reasons) && activeJob.reasons.length > 0 && (
+                            <ul style={{ margin: "6px 0 0", paddingLeft: 18, color: T.textMid, fontSize: "0.78rem" }}>
+                              {activeJob.reasons.map((r, i) => (
+                                <li key={i}>{r}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
 
                       {activeAts.status === "no_resume" ? (
                         <div style={{ fontSize: "0.84rem", color: T.textMid, lineHeight: 1.5 }}>
@@ -1738,9 +2101,11 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                         </div>
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                          <div style={{ fontSize: "0.82rem", color: activeAts.score >= 70 ? T.green : (activeAts.score >= 40 ? T.orange : T.textMid), fontWeight: 500 }}>
-                            {activeAts.summaryMessage}
-                          </div>
+                          {!activeJob?.explanation && (
+                            <div style={{ fontSize: "0.82rem", color: activeAts.score >= 70 ? T.green : (activeAts.score >= 40 ? T.orange : T.textMid), fontWeight: 500 }}>
+                              {activeAts.summaryMessage}
+                            </div>
+                          )}
 
                           {activeAts.matched.length > 0 && (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
@@ -1769,6 +2134,22 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                           )}
                         </div>
                       )}
+
+                      {/* Transparent Algorithmic Disclaimer */}
+                      <div style={{
+                        marginTop: 14,
+                        paddingTop: 10,
+                        borderTop: `1px dashed ${T.border}`,
+                        fontSize: "0.73rem",
+                        color: T.textDim,
+                        fontStyle: "italic",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6
+                      }}>
+                        <span>ℹ️</span>
+                        <span>{activeJob?.scoreDisclaimer || "Algorithmic match score reflects resume relevance, not a guaranteed hiring outcome."}</span>
+                      </div>
                     </div>
 
                     <div style={{ height: 1, background: T.border, marginBottom: 24 }} />
@@ -1837,6 +2218,18 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
           }}
           user={savedUser}
           atsScore={activeAts?.score}
+        />
+      )}
+
+      {/* RAG Auto-Apply Engine Settings Modal */}
+      {isAutoApplyModalOpen && (
+        <AutoApplyConfigModal
+          isOpen={isAutoApplyModalOpen}
+          onClose={() => setIsAutoApplyModalOpen(false)}
+          onConfigSaved={() => {
+            fetchJobs(true);
+            fetchApplications();
+          }}
         />
       )}
     </div>;
