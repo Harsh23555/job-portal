@@ -18,7 +18,8 @@ import {
   AlertTriangle,
   UploadCloud,
   Download,
-  ExternalLink
+  ExternalLink,
+  Sparkles
 } from "lucide-react";
 import { Button, Input, GlassCard, getRelativeTime } from "./JobPortal";
 import { ResumeAnalyzerView } from "./JobPortalResumeAnalyzer";
@@ -1619,6 +1620,65 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                           <span>Resume required before applying. Please upload your resume in My Profile.</span>
                         </div>
                       </div>
+                    ) : activeJob.isExternal ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 32 }}>
+                        <Button
+                          variant="primary"
+                          size="lg"
+                          icon={<Sparkles size={16} />}
+                          style={{
+                            padding: "12px 28px",
+                            background: hasAppliedToActiveJob
+                              ? (isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0")
+                              : "linear-gradient(135deg, #7c6af7, #4ade80)",
+                            color: hasAppliedToActiveJob ? (isDark ? "#8b8499" : "#64748b") : "#ffffff",
+                            fontWeight: 700,
+                            border: "none",
+                            boxShadow: hasAppliedToActiveJob ? "none" : "0 4px 18px rgba(124,106,247,0.35)",
+                          }}
+                          onClick={() => handleApply(activeJob._id || activeJob.id)}
+                          disabled={applyLoading || hasAppliedToActiveJob}
+                        >
+                          {applyLoading
+                            ? "Applying..."
+                            : hasAppliedToActiveJob
+                            ? "Applied with AI ✓"
+                            : "⚡ Auto Apply with AI (RAG)"}
+                        </Button>
+
+                        {(activeJob.externalUrl || activeJob.apply_url) && (
+                          <a
+                            href={activeJob.externalUrl || activeJob.apply_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              color: T.textMid,
+                              fontSize: "0.82rem",
+                              textDecoration: "none",
+                              padding: "10px 16px",
+                              borderRadius: 10,
+                              border: `1px solid ${T.border}`,
+                              background: T.surface,
+                              fontWeight: 500,
+                              transition: "all 0.18s",
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.color = T.purpleL; e.currentTarget.style.borderColor = T.purpleL + "66"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.color = T.textMid; e.currentTarget.style.borderColor = T.border; }}
+                          >
+                            <ExternalLink size={13} />
+                            <span>View on {activeJob.provider === "jooble" ? "Jooble India" : (activeJob.provider === "adzuna" ? "Adzuna India" : activeJob.provider || "Original Site")}</span>
+                          </a>
+                        )}
+
+                        {applySuccess && (
+                          <span style={{ fontSize: "0.9rem", color: applySuccess.includes("Successfully") || applySuccess.includes("successfully") ? T.green : "#ef4444", fontWeight: 600 }}>
+                            {applySuccess}
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 32 }}>
                         <Button
@@ -1627,12 +1687,10 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                           iconRight={!applyLoading && <ArrowRight size={16} />}
                           style={{ padding: "12px 32px" }}
                           onClick={() => handleApply(activeJob._id || activeJob.id)}
-                          disabled={applyLoading || (!activeJob.isExternal && !activeJob.isDemo && hasAppliedToActiveJob)}
+                          disabled={applyLoading || (!activeJob.isDemo && hasAppliedToActiveJob)}
                         >
                           {applyLoading
                             ? "Applying..."
-                            : activeJob.isExternal
-                            ? `Apply on ${activeJob.provider === "jooble" ? "Jooble India" : (activeJob.provider === "adzuna" ? "Adzuna India" : activeJob.provider || "External Site")}`
                             : activeJob.isDemo
                             ? "Demo Application (Instant)"
                             : hasAppliedToActiveJob
