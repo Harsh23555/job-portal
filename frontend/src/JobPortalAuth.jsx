@@ -21,7 +21,8 @@ import {
   TrendingUp,
   ChevronRight,
   BarChart3,
-  Phone
+  Phone,
+  AlertCircle
 } from "lucide-react";
 import { Button, Input } from "./JobPortal";
 import { useGoogleLogin } from "@react-oauth/google";
@@ -170,14 +171,31 @@ function AuthForm({ role, mode, setMode, onSuccess, onBack, initialResetToken = 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [verificationStatus, setVerificationStatus] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState("");
   const isRecruiter = role === "recruiter";
   const signupFields = isRecruiter ? RECRUITER_SIGNUP_FIELDS : STUDENT_SIGNUP_FIELDS;
   const accent = isRecruiter ? T.green : T.purple;
   const accentDim = isRecruiter ? T.greenDim : T.purpleDim;
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthError = params.get("error");
+    if (oauthError === "verification_pending") {
+      setVerificationStatus("pending");
+      setErrorMsg("Verification pending: Your HR account is currently awaiting administrator approval. Please check back later.");
+    } else if (oauthError === "verification_rejected") {
+      setVerificationStatus("rejected");
+      setErrorMsg("Verification rejected: Your HR account verification was rejected by the administrator.");
+    }
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg("");
+    setVerificationStatus(null);
+    setRejectionReason("");
     try {
       if (mode === "forgot") {
         if (!fields.email) {
@@ -213,6 +231,12 @@ function AuthForm({ role, mode, setMode, onSuccess, onBack, initialResetToken = 
         });
         if (!regRes.data.success) {
           throw new Error(regRes.data.message || "Registration failed");
+        }
+        if (role === "recruiter") {
+          setVerificationStatus("pending");
+          setSuccessMsg("HR Registration submitted! Your account is awaiting admin approval before you can log in.");
+          setMode("login");
+          return;
         }
         const loginRes = await API.post("/user/login", {
           email: fields.email,
@@ -254,7 +278,12 @@ function AuthForm({ role, mode, setMode, onSuccess, onBack, initialResetToken = 
       }
     } catch (err) {
       console.error(err);
-      setErrorMsg(err.response?.data?.message || err.message || "An error occurred");
+      const resData = err.response?.data;
+      if (resData?.verificationStatus) {
+        setVerificationStatus(resData.verificationStatus);
+        setRejectionReason(resData.rejectionReason || "");
+      }
+      setErrorMsg(resData?.message || err.message || "An error occurred");
     } finally {
       setLoading(false);
     }
@@ -262,6 +291,8 @@ function AuthForm({ role, mode, setMode, onSuccess, onBack, initialResetToken = 
   const handleMockSocialLogin = async (provider) => {
     setLoading(true);
     setErrorMsg("");
+    setVerificationStatus(null);
+    setRejectionReason("");
     try {
       const email = isRecruiter ? "recruiter@jobsphere.com" : "seeker@jobsphere.com";
       const password2 = "password123";
@@ -280,7 +311,12 @@ function AuthForm({ role, mode, setMode, onSuccess, onBack, initialResetToken = 
       }
     } catch (err) {
       console.error(err);
-      setErrorMsg(err.response?.data?.message || err.message || `${provider} authentication failed`);
+      const resData = err.response?.data;
+      if (resData?.verificationStatus) {
+        setVerificationStatus(resData.verificationStatus);
+        setRejectionReason(resData.rejectionReason || "");
+      }
+      setErrorMsg(resData?.message || err.message || `${provider} authentication failed`);
     } finally {
       setLoading(false);
     }
@@ -289,6 +325,8 @@ function AuthForm({ role, mode, setMode, onSuccess, onBack, initialResetToken = 
     onSuccess: async (tokenResponse) => {
       setLoading(true);
       setErrorMsg("");
+      setVerificationStatus(null);
+      setRejectionReason("");
       try {
         const res = await API.post("/user/auth/google", {
           token: tokenResponse.access_token,
@@ -304,7 +342,12 @@ function AuthForm({ role, mode, setMode, onSuccess, onBack, initialResetToken = 
         }
       } catch (err) {
         console.error(err);
-        setErrorMsg(err.response?.data?.message || err.message || "Google authentication failed");
+        const resData = err.response?.data;
+        if (resData?.verificationStatus) {
+          setVerificationStatus(resData.verificationStatus);
+          setRejectionReason(resData.rejectionReason || "");
+        }
+        setErrorMsg(resData?.message || err.message || "Google authentication failed");
       } finally {
         setLoading(false);
       }
@@ -448,9 +491,177 @@ function AuthForm({ role, mode, setMode, onSuccess, onBack, initialResetToken = 
             {successMsg}
           </div>}
 
-        {errorMsg && <div style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.1)", padding: "8px 12px", borderRadius: 8, fontSize: "0.85rem", textAlign: "center", margin: "4px 0", fontFamily: T.font }}>
+        {verificationStatus === "pending" && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            style={{
+              background: "rgba(234, 179, 8, 0.08)",
+              border: "1.5px solid rgba(234, 179, 8, 0.35)",
+              borderRadius: 12,
+              padding: "16px",
+              margin: "6px 0",
+              fontFamily: T.font,
+              textAlign: "left",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                background: "rgba(234, 179, 8, 0.18)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#eab308",
+                flexShrink: 0
+              }}>
+                <Clock size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#eab308" }}>
+                    Verification Pending
+                  </span>
+                  <span style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 600,
+                    padding: "2px 8px",
+                    background: "rgba(234, 179, 8, 0.2)",
+                    color: "#ca8a04",
+                    borderRadius: 12,
+                    textTransform: "uppercase"
+                  }}>
+                    Awaiting Admin Approval
+                  </span>
+                </div>
+                <p style={{ fontSize: "0.82rem", color: T.textMid, margin: 0, lineHeight: 1.55 }}>
+                  {errorMsg || "Your HR recruiter account is currently awaiting administrator approval. You will be able to log in and post jobs once approved."}
+                </p>
+                <div style={{ marginTop: 8, fontSize: "0.74rem", color: T.textDim, display: "flex", alignItems: "center", gap: 5 }}>
+                  <span>⏳ Verification typically takes 12–24 hours. Check your inbox for updates.</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {verificationStatus === "rejected" && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            style={{
+              background: "rgba(239, 68, 68, 0.08)",
+              border: "1.5px solid rgba(239, 68, 68, 0.35)",
+              borderRadius: 12,
+              padding: "16px",
+              margin: "6px 0",
+              fontFamily: T.font,
+              textAlign: "left",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                background: "rgba(239, 68, 68, 0.18)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#ef4444",
+                flexShrink: 0
+              }}>
+                <AlertCircle size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#ef4444" }}>
+                    Verification Rejected
+                  </span>
+                  <span style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 600,
+                    padding: "2px 8px",
+                    background: "rgba(239, 68, 68, 0.2)",
+                    color: "#dc2626",
+                    borderRadius: 12,
+                    textTransform: "uppercase"
+                  }}>
+                    Action Required
+                  </span>
+                </div>
+                <p style={{ fontSize: "0.82rem", color: T.textMid, margin: "0 0 8px", lineHeight: 1.55 }}>
+                  Your HR account verification was reviewed and rejected by the platform administrator.
+                </p>
+                {rejectionReason && (
+                  <div style={{
+                    background: "rgba(239, 68, 68, 0.06)",
+                    borderLeft: "3px solid #ef4444",
+                    padding: "8px 12px",
+                    borderRadius: 6,
+                    fontSize: "0.78rem",
+                    color: T.text,
+                    marginBottom: 8
+                  }}>
+                    <strong style={{ color: "#ef4444" }}>Reason from Administrator: </strong>
+                    {rejectionReason}
+                  </div>
+                )}
+                <div style={{ fontSize: "0.74rem", color: T.textDim }}>
+                  Please contact platform support if you believe this was an error.
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {verificationStatus === "suspended" && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            style={{
+              background: "rgba(239, 68, 68, 0.08)",
+              border: "1.5px solid rgba(239, 68, 68, 0.35)",
+              borderRadius: 12,
+              padding: "16px",
+              margin: "6px 0",
+              fontFamily: T.font,
+              textAlign: "left",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                background: "rgba(239, 68, 68, 0.18)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#ef4444",
+                flexShrink: 0
+              }}>
+                <AlertCircle size={20} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#ef4444", display: "block", marginBottom: 4 }}>
+                  Account Suspended
+                </span>
+                <p style={{ fontSize: "0.82rem", color: T.textMid, margin: 0, lineHeight: 1.55 }}>
+                  {errorMsg || "Your HR account has been suspended by the administrator. Please contact support to reactivate your access."}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {errorMsg && !verificationStatus && (
+          <div style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.1)", padding: "8px 12px", borderRadius: 8, fontSize: "0.85rem", textAlign: "center", margin: "4px 0", fontFamily: T.font }}>
             {errorMsg}
-          </div>}
+          </div>
+        )}
         <Button
     type="submit"
     variant={isRecruiter ? "green" : "primary"}
@@ -760,6 +971,12 @@ export function JobPortalAuth({
       setRole("student");
       setStep(2);
       setMode("reset");
+    }
+    const err = params.get("error");
+    if (err === "verification_pending" || err === "verification_rejected") {
+      setRole("recruiter");
+      setStep(2);
+      setMode("login");
     }
   }, []);
 

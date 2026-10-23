@@ -169,6 +169,45 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: "Account doesn't exist with current role.", success: false });
     }
 
+    // HR Verification Gate: Only approved HR recruiters are permitted to log in
+    if (user.role === "recruiter") {
+      const status = user.verificationStatus || "pending";
+      if (status === "pending") {
+        return res.status(403).json({
+          message: "Verification pending: Your HR account is currently awaiting administrator approval. Please check back later.",
+          verificationStatus: "pending",
+          success: false,
+        });
+      }
+      if (status === "rejected") {
+        return res.status(403).json({
+          message: user.rejectionReason
+            ? `Verification rejected: ${user.rejectionReason}`
+            : "Verification rejected: Your HR account verification was rejected by the administrator.",
+          verificationStatus: "rejected",
+          rejectionReason: user.rejectionReason || "",
+          success: false,
+        });
+      }
+      if (status === "suspended") {
+        return res.status(403).json({
+          message: user.suspensionReason
+            ? `Account suspended: ${user.suspensionReason}`
+            : "Account suspended: Your HR account has been suspended by the administrator.",
+          verificationStatus: "suspended",
+          suspensionReason: user.suspensionReason || "",
+          success: false,
+        });
+      }
+      if (status !== "approved") {
+        return res.status(403).json({
+          message: "Your HR account is not approved for login.",
+          verificationStatus: status,
+          success: false,
+        });
+      }
+    }
+
     const token = signToken(user._id, { role: user.role, email: user.email });
     setAuthCookie(res, token);
 
@@ -451,6 +490,45 @@ export const googleLogin = async (req, res) => {
       await user.save();
     }
 
+    // HR Verification Gate: Recruiter must be approved by admin before login
+    if (user.role === "recruiter") {
+      const status = user.verificationStatus || "pending";
+      if (status === "pending") {
+        return res.status(403).json({
+          message: "Verification pending: Your HR account is currently awaiting administrator approval. Please check back later.",
+          verificationStatus: "pending",
+          success: false,
+        });
+      }
+      if (status === "rejected") {
+        return res.status(403).json({
+          message: user.rejectionReason
+            ? `Verification rejected: ${user.rejectionReason}`
+            : "Verification rejected: Your HR account verification was rejected by the administrator.",
+          verificationStatus: "rejected",
+          rejectionReason: user.rejectionReason || "",
+          success: false,
+        });
+      }
+      if (status === "suspended") {
+        return res.status(403).json({
+          message: user.suspensionReason
+            ? `Account suspended: ${user.suspensionReason}`
+            : "Account suspended: Your HR account has been suspended by the administrator.",
+          verificationStatus: "suspended",
+          suspensionReason: user.suspensionReason || "",
+          success: false,
+        });
+      }
+      if (status !== "approved") {
+        return res.status(403).json({
+          message: "Your HR account is not approved for login.",
+          verificationStatus: status,
+          success: false,
+        });
+      }
+    }
+
     const jwtToken = signToken(user._id, { role: user.role, email: user.email });
     setAuthCookie(res, jwtToken);
 
@@ -589,6 +667,15 @@ export const githubCallback = async (req, res) => {
     } else if (!user.profile.githubEmail) {
       user.profile.githubEmail = email;
       await user.save();
+    }
+
+    // HR Verification Gate: Recruiter must be approved by admin before login
+    if (user.role === "recruiter") {
+      const status = user.verificationStatus || "pending";
+      if (status !== "approved") {
+        const errorKey = status === "rejected" ? "verification_rejected" : "verification_pending";
+        return res.redirect(`${clientOrigin}/auth?error=${errorKey}`);
+      }
     }
 
     const jwtToken = signToken(user._id);

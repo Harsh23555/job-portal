@@ -1,8 +1,11 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import isAuthenticated from "../middlewares/isAuthenticated.js";
 import { authorizeRole } from "../middlewares/authorizeRole.js";
+import { login } from "../controllers/user.controller.js";
+import { User } from "../models/user.model.js";
 
 const TEST_SECRET = "test_super_secret_key_12345";
 process.env.SECRET_KEY = TEST_SECRET;
@@ -305,6 +308,219 @@ describe("CSRF Protection Middleware Tests", () => {
     assert.equal(nextCalled, false, "Should block mismatched tokens");
     assert.equal(statusCode, 403);
     assert.match(responseData?.message, /CSRF token mismatch/i);
+  });
+});
+
+describe("HR Recruiter Login Verification Gate", () => {
+  const createMockRes = () => {
+    let statusCode = null;
+    let responseData = null;
+    const cookiesSet = {};
+    const res = {
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json(data) {
+        responseData = data;
+        return this;
+      },
+      cookie(name, val, options) {
+        cookiesSet[name] = { val, options };
+        return this;
+      },
+    };
+    return { res, getStatus: () => statusCode, getData: () => responseData, getCookies: () => cookiesSet };
+  };
+
+  test("recruiter with verificationStatus 'pending' is blocked from logging in with 403", async () => {
+    const origFindOne = User.findOne;
+    const origCompare = bcrypt.compare;
+    try {
+      User.findOne = async () => ({
+        _id: "recruiter_pending_id",
+        email: "hr.pending@company.com",
+        password: "hashed_password",
+        role: "recruiter",
+        verificationStatus: "pending",
+        fullname: "Pending HR",
+      });
+      bcrypt.compare = async () => true;
+
+      const { res, getStatus, getData } = createMockRes();
+      await login(
+        {
+          body: {
+            email: "hr.pending@company.com",
+            password: "password123",
+            role: "recruiter",
+          },
+        },
+        res
+      );
+
+      assert.equal(getStatus(), 403, "Pending HR must receive 403");
+      const data = getData();
+      assert.equal(data?.success, false);
+      assert.equal(data?.verificationStatus, "pending");
+      assert.match(data?.message, /Verification pending/i);
+      assert.match(data?.message, /awaiting administrator approval/i);
+    } finally {
+      User.findOne = origFindOne;
+      bcrypt.compare = origCompare;
+    }
+  });
+
+  test("recruiter with verificationStatus 'rejected' is blocked from logging in with 403 and reason", async () => {
+    const origFindOne = User.findOne;
+    const origCompare = bcrypt.compare;
+    try {
+      User.findOne = async () => ({
+        _id: "recruiter_rejected_id",
+        email: "hr.rejected@company.com",
+        password: "hashed_password",
+        role: "recruiter",
+        verificationStatus: "rejected",
+        rejectionReason: "Company email could not be verified.",
+        fullname: "Rejected HR",
+      });
+      bcrypt.compare = async () => true;
+
+      const { res, getStatus, getData } = createMockRes();
+      await login(
+        {
+          body: {
+            email: "hr.rejected@company.com",
+            password: "password123",
+            role: "recruiter",
+          },
+        },
+        res
+      );
+
+      assert.equal(getStatus(), 403, "Rejected HR must receive 403");
+      const data = getData();
+      assert.equal(data?.success, false);
+      assert.equal(data?.verificationStatus, "rejected");
+      assert.equal(data?.rejectionReason, "Company email could not be verified.");
+      assert.match(data?.message, /Verification rejected/i);
+    } finally {
+      User.findOne = origFindOne;
+      bcrypt.compare = origCompare;
+    }
+  });
+
+  test("recruiter with verificationStatus 'suspended' is blocked from logging in with 403", async () => {
+    const origFindOne = User.findOne;
+    const origCompare = bcrypt.compare;
+    try {
+      User.findOne = async () => ({
+        _id: "recruiter_suspended_id",
+        email: "hr.suspended@company.com",
+        password: "hashed_password",
+        role: "recruiter",
+        verificationStatus: "suspended",
+        suspensionReason: "Policy violations detected.",
+        fullname: "Suspended HR",
+      });
+      bcrypt.compare = async () => true;
+
+      const { res, getStatus, getData } = createMockRes();
+      await login(
+        {
+          body: {
+            email: "hr.suspended@company.com",
+            password: "password123",
+            role: "recruiter",
+          },
+        },
+        res
+      );
+
+      assert.equal(getStatus(), 403, "Suspended HR must receive 403");
+      const data = getData();
+      assert.equal(data?.success, false);
+      assert.equal(data?.verificationStatus, "suspended");
+      assert.match(data?.message, /Account suspended/i);
+    } finally {
+      User.findOne = origFindOne;
+      bcrypt.compare = origCompare;
+    }
+  });
+
+  test("recruiter with verificationStatus 'approved' logs in successfully with 200 and token cookie", async () => {
+    const origFindOne = User.findOne;
+    const origCompare = bcrypt.compare;
+    try {
+      User.findOne = async () => ({
+        _id: "recruiter_approved_id",
+        email: "hr.approved@company.com",
+        password: "hashed_password",
+        role: "recruiter",
+        verificationStatus: "approved",
+        fullname: "Approved HR",
+        profile: { bio: "", skills: [] },
+      });
+      bcrypt.compare = async () => true;
+
+      const { res, getStatus, getData, getCookies } = createMockRes();
+      await login(
+        {
+          body: {
+            email: "hr.approved@company.com",
+            password: "password123",
+            role: "recruiter",
+          },
+        },
+        res
+      );
+
+      assert.equal(getStatus(), 200, "Approved HR must receive 200");
+      const data = getData();
+      assert.equal(data?.success, true);
+      assert.equal(data?.user?.verificationStatus, "approved");
+      assert.match(data?.message, /Welcome back/i);
+      assert.ok(getCookies()?.token, "Token cookie must be set");
+    } finally {
+      User.findOne = origFindOne;
+      bcrypt.compare = origCompare;
+    }
+  });
+
+  test("student login is unaffected by verificationStatus and logs in with 200", async () => {
+    const origFindOne = User.findOne;
+    const origCompare = bcrypt.compare;
+    try {
+      User.findOne = async () => ({
+        _id: "student_id",
+        email: "student@test.com",
+        password: "hashed_password",
+        role: "student",
+        fullname: "Student Candidate",
+        profile: { bio: "", skills: [] },
+      });
+      bcrypt.compare = async () => true;
+
+      const { res, getStatus, getData, getCookies } = createMockRes();
+      await login(
+        {
+          body: {
+            email: "student@test.com",
+            password: "password123",
+            role: "student",
+          },
+        },
+        res
+      );
+
+      assert.equal(getStatus(), 200, "Student must log in with 200");
+      const data = getData();
+      assert.equal(data?.success, true);
+      assert.ok(getCookies()?.token, "Token cookie must be set for student");
+    } finally {
+      User.findOne = origFindOne;
+      bcrypt.compare = origCompare;
+    }
   });
 });
 
