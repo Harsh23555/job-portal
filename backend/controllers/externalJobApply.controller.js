@@ -22,27 +22,28 @@ function buildCoverLetterPrompt(user, job, analysis) {
   const userSkills = user.profile?.skills?.slice(0, 8) || [];
   const allSkills = [...new Set([...skills, ...userSkills])].join(", ");
   const summary = analysis?.professional_summary || user.profile?.bio || "";
-  const yearsExp = analysis?.total_years_experience || "several";
+  const yearsExp = analysis?.total_years_experience || user.profile?.yearsOfExperience || "several";
   const jobSkills = (job.skills || []).slice(0, 6).join(", ");
+  const jobDescSnippet = (job.description || "").slice(0, 400);
 
   return {
-    system: "You are an expert career coach. Write concise, authentic cover letter paragraphs (3–4 sentences max). Never exaggerate. Output JSON only.",
-    user: `Write a tailored cover letter body for this application.
+    system: "You are an expert AI career agent that auto-applies to jobs for candidates. Write an authentic, compelling, 3-4 sentence cover letter paragraph tailored to the specific role using the applicant's verified profile data and skills. Never invent experience. Return JSON only.",
+    user: `Tailor this application for the candidate based on their saved profile:
 
-Applicant:
-- Name: ${user.fullname}
-- Summary: ${summary}
-- Skills: ${allSkills}
+Applicant Profile:
+- Full Name: ${user.fullname || "Applicant"}
+- Summary/Bio: ${summary || "Dedicated professional with proven domain expertise"}
+- Verified Skills: ${allSkills || "Technical skills, communication, problem solving"}
 - Years of Experience: ${yearsExp}
 
-Job:
+Target Job:
 - Title: ${job.title}
-- Company: ${job.companyName || "the company"}
-- Required Skills: ${jobSkills}
+- Company: ${job.companyName || "the organization"}
+- Required Skills: ${jobSkills || "Technical skills relevant to role"}
 - Location: ${job.location || ""}
-- Type: ${job.jobType || ""}
+- Description: ${jobDescSnippet}
 
-Output JSON: { "coverLetter": "<3-4 sentence cover letter body in first person, professional, no «Dear Hiring Manager» greeting, no closing signature>" }`,
+Output JSON strictly as: { "coverLetter": "<3-4 sentence tailored cover letter body in first person, professional, no greetings, no closing signature>" }`,
   };
 }
 
