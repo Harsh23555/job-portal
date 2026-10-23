@@ -176,7 +176,9 @@ const NAV_LINKS = [
 function JobNavbar({
   onAuthClick,
   activeSection,
-  onSectionChange
+  onSectionChange,
+  onHRRegister,
+  onAdminLogin
 }) {
   const { isDark, T } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -345,6 +347,52 @@ function JobNavbar({
             <Zap size={14} />
             Post a Job
           </button>
+          {onHRRegister && <button
+            onClick={onHRRegister}
+            style={{
+              height: 36,
+              padding: "0 14px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 5,
+              background: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4",
+              border: `1px solid ${isDark ? "rgba(74,222,128,0.2)" : "#bbf7d0"}`,
+              borderRadius: 8,
+              color: isDark ? "#4ade80" : "#16a34a",
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: T.font,
+              transition: "all 0.18s",
+              whiteSpace: "nowrap"
+            }}
+          >
+            HR Register
+          </button>}
+          {onAdminLogin && <button
+            onClick={onAdminLogin}
+            style={{
+              height: 36,
+              padding: "0 12px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "transparent",
+              border: `1px solid ${T.border}`,
+              borderRadius: 8,
+              color: T.textDim,
+              fontSize: "0.78rem",
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: T.font,
+              transition: "all 0.18s",
+              whiteSpace: "nowrap"
+            }}
+            title="Admin Login"
+          >
+            Admin
+          </button>}
         </div>
 
         {/* Mobile toggle */}
@@ -1180,7 +1228,7 @@ function FooterStrip({ onSectionChange }) {
       </div>
     </div>;
 }
-export function JobPortalPublic({ onAuthClick, onSignInForJob, onApplyExternalJob }) {
+export function JobPortalPublic({ onAuthClick, onSignInForJob, onApplyExternalJob, onHRRegister, onAdminLogin }) {
   const { isDark } = useTheme();
   const [section, setSection] = useState("find-jobs");
   const [categoryFilter, setCategoryFilter] = useState(null);
@@ -1290,7 +1338,7 @@ export function JobPortalPublic({ onAuthClick, onSignInForJob, onApplyExternalJo
     }
   };
   return <div style={{ background: T.bg, minHeight: "100vh", fontFamily: T.font }}>
-      <JobNavbar onAuthClick={onAuthClick} activeSection={section} onSectionChange={handleSectionChange} />
+      <JobNavbar onAuthClick={onAuthClick} activeSection={section} onSectionChange={handleSectionChange} onHRRegister={onHRRegister} onAdminLogin={onAdminLogin} />
 
       <AnimatePresence mode="wait">
         {section === "find-jobs" && <motion.div key="find-jobs" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}>

@@ -691,6 +691,9 @@ export function JobPortalRecruiterView({ onSignOut }) {
       setPostLoading(false);
     }
   };
+  const verificationStatus = savedUser.verificationStatus || "pending";
+  const isApproved = verificationStatus === "approved";
+
   const activeJobsCount = jobs.length;
   const totalApplicantsCount = applicants.length;
   const shortlistedCount = applicants.filter((a) => a.status === "accepted" || a.status === "interview").length;
@@ -713,16 +716,47 @@ export function JobPortalRecruiterView({ onSignOut }) {
     accepted: kanbanApplicants.filter((a) => a.status === "accepted" || a.status === "interview"),
     rejected: kanbanApplicants.filter((a) => a.status === "rejected")
   };
+
+  // Verification status banner config
+  const statusBanners = {
+    pending: { bg: "rgba(251,191,36,0.1)", border: "rgba(251,191,36,0.3)", color: "#f59e0b", icon: "⏳", title: "Account Pending Verification", message: "Your HR account is awaiting admin approval. You will be able to create companies and post jobs once your account is verified." },
+    rejected: { bg: "rgba(239,68,68,0.1)", border: "rgba(239,68,68,0.3)", color: "#ef4444", icon: "❌", title: "Account Rejected", message: savedUser.rejectionReason ? `Your HR registration was rejected. Reason: ${savedUser.rejectionReason}` : "Your HR registration was rejected by an admin. Please contact support for more information." },
+    suspended: { bg: "rgba(249,115,22,0.1)", border: "rgba(249,115,22,0.3)", color: "#ea580c", icon: "⚠️", title: "Account Suspended", message: savedUser.suspensionReason ? `Your HR account has been suspended. Reason: ${savedUser.suspensionReason}` : "Your HR account has been temporarily suspended. Please contact the administrator for reactivation." },
+  };
+  const banner = statusBanners[verificationStatus];
+
   return <div style={{ background: T.bg, minHeight: "100vh", fontFamily: T.font, display: "flex", flexDirection: "column" }}>
       <RecruiterNavbar
     onSignOut={onSignOut}
-    onOpenPostModal={() => setIsPostModalOpen(true)}
+    onOpenPostModal={() => {
+      if (!isApproved) return; // Block unapproved users
+      setIsPostModalOpen(true);
+    }}
     userName={userName}
     activeTab={activeTab}
     onTabChange={setActiveTab}
     key={userVer}
   />
-      
+
+      {/* Verification Status Banner */}
+      {banner && <div style={{ maxWidth: 1200, width: "100%", margin: "16px auto 0", padding: "0 24px", boxSizing: "border-box" }}>
+        <div style={{
+          background: banner.bg,
+          border: `1px solid ${banner.border}`,
+          borderRadius: 12,
+          padding: "16px 20px",
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 12,
+        }}>
+          <span style={{ fontSize: "1.3rem", lineHeight: 1 }}>{banner.icon}</span>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: "0.9rem", color: banner.color, marginBottom: 4 }}>{banner.title}</div>
+            <div style={{ fontSize: "0.82rem", color: T.textMid, lineHeight: 1.5 }}>{banner.message}</div>
+          </div>
+        </div>
+      </div>}
+       
       <AnimatePresence mode="wait">
         <motion.div
     key={activeTab}

@@ -5,6 +5,9 @@ import { JobPortalPublic } from "./JobPortal";
 import { JobPortalAuth } from "./JobPortalAuth";
 import { JobPortalApplicantView } from "./JobPortalApplicantView";
 import { JobPortalRecruiterView } from "./JobPortalRecruiterView";
+import { JobPortalHRRegister } from "./JobPortalHRRegister";
+import { JobPortalAdminLogin } from "./JobPortalAdminLogin";
+import { JobPortalAdminDashboard } from "./JobPortalAdminDashboard";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import API from "./services/api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -38,6 +41,7 @@ function AppContent() {
 
   const [authInitialMode, setAuthInitialMode] = useState("login");
   const [pendingJob, setPendingJob] = useState(null); // job selected by unauthenticated user
+  const [adminData, setAdminData] = useState(null); // admin session
 
   // Handle session expiry from API interceptor
   useEffect(() => {
@@ -132,6 +136,13 @@ function AppContent() {
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "1057421115865-dummyclientid.apps.googleusercontent.com";
 
+  const motionProps = {
+    initial: { opacity: 0, y: 15 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -15 },
+    transition: { duration: 0.28, ease: "easeInOut" },
+  };
+
   return (
     <GoogleOAuthProvider clientId={googleClientId}>
       <div
@@ -147,14 +158,7 @@ function AppContent() {
       >
         <AnimatePresence mode="wait">
           {appMode === "portal" && (
-            <motion.div
-              key="portal"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.28, ease: "easeInOut" }}
-              style={{ width: "100%", minHeight: "100vh" }}
-            >
+            <motion.div key="portal" {...motionProps} style={{ width: "100%", minHeight: "100vh" }}>
               <JobPortalPublic
                 onAuthClick={(mode) => {
                   setAuthInitialMode(mode);
@@ -168,19 +172,14 @@ function AppContent() {
                   setAppMode("portal-auth");
                 }}
                 onApplyExternalJob={handleApplyExternalJob}
+                onHRRegister={() => setAppMode("hr-register")}
+                onAdminLogin={() => setAppMode("admin-login")}
               />
             </motion.div>
           )}
 
           {appMode === "portal-auth" && (
-            <motion.div
-              key="portal-auth"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.28, ease: "easeInOut" }}
-              style={{ width: "100%", minHeight: "100vh" }}
-            >
+            <motion.div key="portal-auth" {...motionProps} style={{ width: "100%", minHeight: "100vh" }}>
               <JobPortalAuth
                 initialMode={authInitialMode}
                 onSuccess={(userData, token) => handleAuthSuccess(userData, token)}
@@ -193,14 +192,7 @@ function AppContent() {
           )}
 
           {appMode === "applicant" && (
-            <motion.div
-              key="applicant"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.28, ease: "easeInOut" }}
-              style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column" }}
-            >
+            <motion.div key="applicant" {...motionProps} style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
               <JobPortalApplicantView
                 onSignOut={handleSignOut}
                 initialJobId={pendingJob?._id || null}
@@ -210,15 +202,41 @@ function AppContent() {
           )}
 
           {appMode === "recruiter" && (
-            <motion.div
-              key="recruiter"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.28, ease: "easeInOut" }}
-              style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column" }}
-            >
+            <motion.div key="recruiter" {...motionProps} style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
               <JobPortalRecruiterView onSignOut={handleSignOut} />
+            </motion.div>
+          )}
+
+          {appMode === "hr-register" && (
+            <motion.div key="hr-register" {...motionProps} style={{ width: "100%", minHeight: "100vh" }}>
+              <JobPortalHRRegister
+                onBack={() => setAppMode("portal")}
+                onSuccess={() => setAppMode("portal")}
+              />
+            </motion.div>
+          )}
+
+          {appMode === "admin-login" && (
+            <motion.div key="admin-login" {...motionProps} style={{ width: "100%", minHeight: "100vh" }}>
+              <JobPortalAdminLogin
+                onBack={() => setAppMode("portal")}
+                onSuccess={(admin) => {
+                  setAdminData(admin);
+                  setAppMode("admin-dashboard");
+                }}
+              />
+            </motion.div>
+          )}
+
+          {appMode === "admin-dashboard" && (
+            <motion.div key="admin-dashboard" {...motionProps} style={{ width: "100%", minHeight: "100vh" }}>
+              <JobPortalAdminDashboard
+                admin={adminData}
+                onSignOut={() => {
+                  setAdminData(null);
+                  setAppMode("portal");
+                }}
+              />
             </motion.div>
           )}
         </AnimatePresence>
