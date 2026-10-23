@@ -66,8 +66,30 @@ const externalJobApplicationSchema = new mongoose.Schema(
     /** Application lifecycle status */
     status: {
       type: String,
-      enum: ["applied", "viewed", "archived"],
-      default: "applied",
+      enum: [
+        "recommended",
+        "saved",
+        "awaiting_review",
+        "ready_to_apply",
+        "applied",
+        "submitted",
+        "submission_failed",
+        "viewed",
+        "assessment_requested",
+        "interview",
+        "rejected",
+        "offer_received",
+        "archived",
+      ],
+      default: "submitted",
+    },
+    statusNotes: {
+      type: String,
+      default: "",
+    },
+    interviewDate: {
+      type: Date,
+      default: null,
     },
 
     /** Whether the AI helped auto-fill this application */
