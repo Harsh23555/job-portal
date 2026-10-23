@@ -30,6 +30,7 @@ import { formatRelativeTime } from "./utils/dateParser";
 import API from "./services/api";
 import { useTheme, ThemeToggle, T } from "./context/ThemeContext";
 import JobDescriptionMarkup from "./components/JobDescriptionMarkup";
+import ExternalApplyModal from "./components/ExternalApplyModal";
 
 function Tag({ children, color, textColor }) {
   const { isDark } = useTheme();
@@ -633,6 +634,7 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
   const [linkSuccess, setLinkSuccess] = useState("");
   const [resumeAnalysis, setResumeAnalysis] = useState(null);
   const [enrichingDesc, setEnrichingDesc] = useState(false);
+  const [externalModalJob, setExternalModalJob] = useState(null);
   const abortControllerRef = useRef(null);
 
   const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -877,8 +879,11 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
 
   const handleApply = async (jobId) => {
     const job = jobs.find((j) => (j._id || j.id) === jobId);
-    if (job?.isExternal && (job.externalUrl || job.apply_url)) {
-      window.open(job.externalUrl || job.apply_url, "_blank", "noopener,noreferrer");
+    if (!job) return;
+
+    if (job.isExternal) {
+      // Auto-apply in-app using RAG and saved profile data
+      setExternalModalJob(job);
       return;
     }
     if (job?.isDemo) {
@@ -1761,5 +1766,20 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
   )}
         </motion.div>
       </AnimatePresence>
+
+      {/* RAG Auto-Apply Modal for External Jobs */}
+      {externalModalJob && (
+        <ExternalApplyModal
+          job={externalModalJob}
+          onClose={() => setExternalModalJob(null)}
+          onSuccess={() => {
+            setExternalModalJob(null);
+            setApplySuccess("Application auto-submitted successfully with AI!");
+            fetchApplications();
+          }}
+          user={savedUser}
+          atsScore={activeAts?.score}
+        />
+      )}
     </div>;
 }
