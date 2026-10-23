@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { PDFParse } from "pdf-parse";
+import mammoth from "mammoth";
 
 /** Normalizes whitespace and newlines in extracted text. */
 export function normalizeText(raw = "") {
@@ -21,9 +22,9 @@ export function computeResumeHash(text = "") {
   return crypto.createHash("sha256").update(normalized).digest("hex");
 }
 
-/** Extracts readable text from resume buffer (PDF, TXT, MD). */
+/** Extracts readable text from resume buffer (PDF, DOCX, TXT, MD). */
 export async function extractResumeText(fileBuffer, originalName = "", mimeType = "") {
-  if (!fileBuffer || !Buffer.isBuffer(fileBuffer) && !(fileBuffer instanceof Uint8Array)) {
+  if (!fileBuffer || (!Buffer.isBuffer(fileBuffer) && !(fileBuffer instanceof Uint8Array))) {
     throw new Error("Invalid resume buffer provided.");
   }
 
@@ -31,14 +32,28 @@ export async function extractResumeText(fileBuffer, originalName = "", mimeType 
     throw new Error("Uploaded resume file is empty.");
   }
 
+  const ext = (originalName || "").toLowerCase();
+  const isDocx = ext.endsWith(".docx") || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const isPdfHeader = fileBuffer.slice(0, 5).toString("utf-8").startsWith("%PDF");
-  const isPdfExtension = originalName.toLowerCase().endsWith(".pdf");
+  const isPdfExtension = ext.endsWith(".pdf");
   const isPdfMime = mimeType === "application/pdf";
   const isPdf = isPdfHeader || isPdfExtension || isPdfMime;
+  const isTxt = ext.endsWith(".txt") || ext.endsWith(".md") || (mimeType && mimeType.startsWith("text/"));
+
+  if (!isDocx && !isPdf && !isTxt) {
+    throw new Error("Unsupported resume file format. Only PDF (.pdf) and Word (.docx) documents are supported.");
+  }
 
   let rawText = "";
 
-  if (isPdf) {
+  if (isDocx) {
+    try {
+      const docxResult = await mammoth.extractRawText({ buffer: fileBuffer });
+      rawText = docxResult?.value || "";
+    } catch (docxErr) {
+      throw new Error(`Failed to parse DOCX resume: ${docxErr.message || "Invalid or corrupt DOCX file."}`);
+    }
+  } else if (isPdf) {
     try {
       const parser = new PDFParse({ data: fileBuffer });
       const textResult = await parser.getText();
