@@ -184,6 +184,7 @@ function ProfileView({
   externalSuccess = "",
   onClearExternal
 }) {
+  const { isDark } = useTheme();
   const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
   const [fullname, setFullname] = useState(savedUser.fullname || "");
   const [email, setEmail] = useState(savedUser.email || "");

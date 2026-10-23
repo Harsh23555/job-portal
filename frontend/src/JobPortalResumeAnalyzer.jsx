@@ -379,7 +379,7 @@ export function ResumeAnalyzerView() {
               type="file"
               ref={fileInputRef}
               onChange={handleFileChange}
-              accept=".pdf,.txt,.md"
+              accept=".pdf,.doc,.docx,.txt"
               style={{ display: "none" }}
             />
 
@@ -455,6 +455,21 @@ export function ResumeAnalyzerView() {
             >
               Start AI Analysis
             </Button>
+
+            {/* Helper hint shown when button is disabled */}
+            {!file && (
+              <p style={{
+                marginTop: 12,
+                fontSize: "0.82rem",
+                color: T.purpleL,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}>
+                <UploadCloud size={14} />
+                Click the area above or drag &amp; drop a file to get started
+              </p>
+            )}
           </div>
 
           {/* Value Props Grid */}

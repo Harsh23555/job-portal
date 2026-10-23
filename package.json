@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "mammoth": "^1.13.0",
+    "package-name": "^0.1.0"
+  }
+}

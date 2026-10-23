@@ -60,6 +60,7 @@ export function Button({
     ghost: { background: isDark ? "transparent" : "#f1f5f9", color: T.textMid, border: `1px solid ${T.border}` },
     green: { background: "linear-gradient(135deg, #4ade80 0%, #22c55e 100%)", color: "#09090f", border: "none" }
   };
+  const isDisabled = Boolean(props.disabled);
   return <button
     style={{
       display: "inline-flex",
@@ -70,18 +71,20 @@ export function Button({
       fontFamily: T.font,
       fontWeight: 600,
       fontSize: fontSizes[size],
-      cursor: "pointer",
+      cursor: isDisabled ? "not-allowed" : "pointer",
       transition: "all 0.18s",
       letterSpacing: "0.01em",
       whiteSpace: "nowrap",
+      opacity: isDisabled ? 0.45 : 1,
+      pointerEvents: isDisabled ? "none" : undefined,
       ...variants[variant],
       ...style
     }}
     onMouseEnter={(e) => {
-      Object.assign(e.currentTarget.style, { opacity: "0.88", transform: "translateY(-1px)" });
+      if (!isDisabled) Object.assign(e.currentTarget.style, { opacity: "0.88", transform: "translateY(-1px)" });
     }}
     onMouseLeave={(e) => {
-      Object.assign(e.currentTarget.style, { opacity: "1", transform: "translateY(0)" });
+      if (!isDisabled) Object.assign(e.currentTarget.style, { opacity: "1", transform: "translateY(0)" });
     }}
     {...props}
   >
