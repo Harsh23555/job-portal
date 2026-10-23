@@ -117,22 +117,28 @@ app.use("/api", (req, res) => {
 // Centralized error handler
 app.use(errorHandler);
 
-// Start server
+// Detect serverless environment (Vercel)
+const IS_SERVERLESS = !!(process.env.VERCEL || process.env.NOW_REGION);
+
+// Start server — only when running as a long-lived Node process (i.e. locally or on Docker)
 const PORT = config.port;
-if (process.env.NODE_ENV !== "test") {
+if (process.env.NODE_ENV !== "test" && !IS_SERVERLESS) {
   connectDB().then((connected) => {
     app.listen(PORT, () => {
       console.log(`Server running at port ${PORT}`);
       if (connected) {
-        // Background external job synchronization
+        // Background external job synchronization (not supported on serverless)
         scheduleSyncLoop();
-        // Background embedding scheduler
+        // Background embedding scheduler (not supported on serverless)
         startEmbeddingScheduler();
       } else {
         console.warn("[externalJobSync] Skipping background tasks because database is not connected.");
       }
     });
   });
+} else if (IS_SERVERLESS) {
+  // On Vercel: connect DB lazily on first request (cached across warm invocations)
+  connectDB().catch((err) => console.error("[Vercel] DB connection error:", err.message));
 }
 
 export default app;
