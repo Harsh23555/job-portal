@@ -223,7 +223,12 @@ export const applyToExternalJob = async (req, res, next) => {
 
 export const previewCoverLetter = async (req, res, next) => {
   try {
-    const user = req.user;
+    let user = req.user;
+    const userId = user?._id || req.id;
+    if (userId) {
+      const dbUser = await User.findById(userId).select("-password").lean();
+      if (dbUser) user = { ...user, ...dbUser };
+    }
     const { id: externalJobId } = req.params;
 
     const job = await ExternalJob.findById(externalJobId).lean();
