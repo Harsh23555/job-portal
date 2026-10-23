@@ -718,10 +718,41 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
 
   const fetchApplications = async () => {
     try {
-      const res = await API.get("/application/get");
-      if (res.data.success) {
-        setApplications(res.data.application || []);
-      }
+      const [internalRes, externalRes] = await Promise.allSettled([
+        API.get("/application/get"),
+        API.get("/external-jobs/my-applications"),
+      ]);
+
+      const internalApps = internalRes.status === "fulfilled" && internalRes.value.data?.success ? (internalRes.value.data.application || []) : [];
+      const externalApps = externalRes.status === "fulfilled" && externalRes.value.data?.success ? (externalRes.value.data.applications || []) : [];
+
+      const normalizedExternal = externalApps.map((app) => ({
+        _id: app._id,
+        isExternal: true,
+        status: app.status || "pending",
+        createdAt: app.createdAt,
+        atsScore: app.atsScore,
+        aiAssisted: app.aiAssisted,
+        aiModel: app.aiModel,
+        coverLetter: app.coverLetter,
+        externalJobId: app.externalJobId,
+        job: {
+          _id: app.externalJobId,
+          title: app.jobSnapshot?.title,
+          company: { name: app.jobSnapshot?.companyName || "External Organization" },
+          location: app.jobSnapshot?.location || "Remote",
+          salaryDisplay: app.jobSnapshot?.salaryDisplay,
+          provider: app.jobSnapshot?.provider,
+          externalUrl: app.jobSnapshot?.externalUrl,
+        },
+        applicant: {
+          fullname: app.applicantDetails?.fullname,
+          email: app.applicantDetails?.email,
+          phoneNumber: app.applicantDetails?.phoneNumber,
+        },
+      }));
+
+      setApplications([...internalApps, ...normalizedExternal]);
     } catch (err) {
       console.error(err);
     }
@@ -982,7 +1013,15 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
     return calculateATSScore(combinedUserSkills, skills, hasResume);
   };
 
-  const hasAppliedToActiveJob = activeJob && applications.some((app) => app.job?._id === activeJob._id || app.job === activeJob._id);
+  const hasAppliedToActiveJob =
+    activeJob &&
+    applications.some(
+      (app) =>
+        app.job?._id === activeJob._id ||
+        app.job === activeJob._id ||
+        app.externalJobId === activeJob._id ||
+        (activeJob.id && (app.externalJobId === activeJob.id || app.job?._id === activeJob.id))
+    );
 
   // Auto-fetch complete job description for external jobs if snippet is truncated
   useEffect(() => {
