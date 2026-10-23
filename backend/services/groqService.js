@@ -4,8 +4,8 @@ import { validateAnalysis } from "../utils/analysisValidator.js";
 import { generateLocalResumeAnalysis } from "./heuristicAnalyzer.js";
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const DEFAULT_MODEL = "openai/gpt-oss-120b";
-const FALLBACK_MODEL = "llama-3.3-70b-versatile";
+const DEFAULT_MODEL = "llama-3.3-70b-versatile";
+const FALLBACK_MODEL = "llama-3.1-8b-instant";
 
 // Deduplicates concurrent calls for identical resume hash
 const inFlightRequests = new Map();
@@ -75,6 +75,8 @@ export class GroqResumeAnalyzerService {
         const payload = {
           model: currentModel,
           temperature: 0.1,
+          max_completion_tokens: 8192,
+          max_tokens: 8192,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
@@ -128,15 +130,13 @@ export class GroqResumeAnalyzerService {
         const status = err.response?.status;
         const headers = err.response?.headers || {};
         const errorData = err.response?.data?.error;
+        const errMsg = String(errorData?.message || err.message || "").toLowerCase();
 
-        // Model fallback
-        if (status === 400 || status === 404) {
-          const errMsg = String(errorData?.message || "").toLowerCase();
-          if (errMsg.includes("model") && currentModel !== this.fallbackModel) {
-            console.warn(`Primary model ${currentModel} not available, switching to fallback: ${this.fallbackModel}`);
-            currentModel = this.fallbackModel;
-            continue;
-          }
+        // Model fallback for token limits, invalid model, or 400 bad request
+        if ((status === 400 || status === 404 || status === 422 || errMsg.includes("token")) && currentModel !== this.fallbackModel) {
+          console.warn(`[Groq AI] Model ${currentModel} error (${errMsg.slice(0, 100)}). Switching to fallback: ${this.fallbackModel}...`);
+          currentModel = this.fallbackModel;
+          continue;
         }
 
         // Rate limit (429) backoff
@@ -152,11 +152,6 @@ export class GroqResumeAnalyzerService {
             console.warn(`[Groq AI] Rate limit reached (429). Retrying in ${delayMs}ms (attempt ${attempt}/${this.maxRetries})...`);
             await sleep(delayMs);
             continue;
-          } else {
-            const waitTime = !isNaN(retryAfterSec) && retryAfterSec > 0 ? `${retryAfterSec}s` : "a few moments";
-            throw new Error(
-              `Groq AI service rate limit reached. Please wait ${waitTime} before analyzing another resume.`
-            );
           }
         }
 
@@ -172,8 +167,14 @@ export class GroqResumeAnalyzerService {
       }
     }
 
-    const message = lastError?.response?.data?.error?.message || lastError?.message || "Failed to analyze resume with Groq AI.";
-    throw new Error(`AI Resume Analysis error: ${message}`);
+    // Graceful fallback to local heuristic analyzer if Groq fails or token limits are exceeded
+    console.warn(`[GroqResumeAnalyzerService] Groq API returned error: "${lastError?.response?.data?.error?.message || lastError?.message}". Seamlessly engaging resilient local AI analyzer.`);
+    const localAnalysis = generateLocalResumeAnalysis(resumeText);
+    return {
+      analysis: localAnalysis,
+      modelUsed: "local-heuristic-engine-fallback",
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    };
   }
 }
 

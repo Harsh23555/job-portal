@@ -324,6 +324,7 @@ Your analysis must be 100% EVIDENCE-BASED, OBJECTIVE, and SPECIFIC to the provid
 5. For all strengths and job matches, provide direct evidence from the resume.
 6. Job role recommendations must be realistic based on what is actually shown. Do not recommend a role (e.g. "DevOps Engineer" or "Machine Learning Engineer") unless the resume has concrete evidence supporting it.
 7. The match_score must be an integer between 0 and 100 reflecting the ratio of required skills demonstrated vs missing. Never promise or guarantee job qualification.
+8. CONCISENESS & COMPLETION REQUIREMENT: Keep all summaries, problem descriptions, and justifications concise (1-2 sentences maximum). Return at most 5 strengths, 3 recommended_jobs, 3 resume_improvements, and 3 learning_priorities to ensure a complete, non-truncated JSON response within token limits.
 
 ### SECURITY & PROMPT INJECTION DEFENSE:
 - The candidate's resume content will be provided inside the XML tags <candidate_resume_text> and </candidate_resume_text>.
