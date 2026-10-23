@@ -49,6 +49,82 @@ const userSchema = new mongoose.Schema(
       githubEmail: { type: String },
     },
 
+    // ─── Candidate Profile Confirmation & Preferences (RAG Job Matching) ───────
+    profileConfirmed: {
+      type: Boolean,
+      default: false,
+    },
+    candidateProfile: {
+      summary: { type: String, default: "" },
+      currentTitle: { type: String, default: "" },
+      skills: [{ type: String }],
+      softSkills: [{ type: String }],
+      experienceYears: { type: Number, default: 0 },
+      experienceDetails: [
+        {
+          company: { type: String, default: "" },
+          role: { type: String, default: "" },
+          duration: { type: String, default: "" },
+          description: { type: String, default: "" },
+        },
+      ],
+      education: [
+        {
+          institution: { type: String, default: "" },
+          degree: { type: String, default: "" },
+          year: { type: String, default: "" },
+        },
+      ],
+      certifications: [{ type: String }],
+      projects: [
+        {
+          name: { type: String, default: "" },
+          description: { type: String, default: "" },
+          technologies: [{ type: String }],
+        },
+      ],
+      preferredJobTitles: [{ type: String }],
+      preferredLocations: [{ type: String }],
+      remotePreference: {
+        type: String,
+        enum: ["any", "remote", "hybrid", "onsite"],
+        default: "any",
+      },
+      expectedSalary: { type: Number, default: null },
+      dataProcessingConsent: { type: Boolean, default: false },
+      consentTimestamp: { type: Date, default: null },
+      confirmedAt: { type: Date, default: null },
+    },
+
+    // ─── Resume Semantic Embedding (pgvector / vector search equivalent) ──────
+    resumeEmbedding: {
+      vector: [{ type: Number }],
+      modelVersion: { type: String, default: "" },
+      updatedAt: { type: Date, default: null },
+    },
+
+    // ─── Controlled Auto-Apply Engine (Tesenta.ai style) ─────────────────────
+    autoApplyConfig: {
+      enabled: { type: Boolean, default: false },
+      minMatchScore: { type: Number, default: 75 },
+      preferredJobTitles: [{ type: String }],
+      allowedLocations: [{ type: String }],
+      minSalary: { type: Number, default: 0 },
+      remotePreference: {
+        type: String,
+        enum: ["any", "remote", "hybrid", "onsite"],
+        default: "any",
+      },
+      excludedCompanies: [{ type: String }],
+      maxApplicationsPerDay: { type: Number, default: 5 },
+      appliedTodayCount: { type: Number, default: 0 },
+      lastAppliedDate: { type: String, default: "" },
+      isPaused: { type: Boolean, default: false },
+      emergencyStop: { type: Boolean, default: false },
+      userAuthorized: { type: Boolean, default: false },
+      authorizationTimestamp: { type: Date, default: null },
+    },
+
     // ─── HR / Recruiter Verification Fields ───────────────────────────────────
     /** HR account verification status. Only applicable when role === "recruiter". */
     verificationStatus: {
