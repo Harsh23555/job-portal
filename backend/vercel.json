@@ -5,7 +5,8 @@
       "src": "index.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["utils/**", "models/**", "controllers/**", "middlewares/**", "routes/**", "services/**", "providers/**"]
+        "includeFiles": ["utils/**", "models/**", "controllers/**", "middlewares/**", "routes/**", "services/**", "providers/**"],
+        "maxDuration": 30
       }
     }
   ],
@@ -14,10 +15,5 @@
       "src": "/(.*)",
       "dest": "index.js"
     }
-  ],
-  "functions": {
-    "index.js": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
