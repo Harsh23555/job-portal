@@ -1,6 +1,8 @@
 /** Request validation and sanitization helpers. */
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const URL_REGEX = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
+const PHONE_REGEX = /^[+\d\s\-().]{5,20}$/;
 
 export const isValidEmail = (email) => {
   if (typeof email !== "string") return false;
@@ -22,6 +24,24 @@ export const isValidApplicationStatus = (status) => {
   return ["pending", "accepted", "rejected"].includes(s);
 };
 
+/** Validates a URL string. */
+export const isValidUrl = (url) => {
+  if (typeof url !== "string") return false;
+  return URL_REGEX.test(url.trim());
+};
+
+/** Validates a phone number string. */
+export const isValidPhone = (phone) => {
+  if (typeof phone !== "string") return false;
+  return PHONE_REGEX.test(phone.trim());
+};
+
+/** Validates HR verification status values. */
+export const isValidVerificationStatus = (status) => {
+  if (typeof status !== "string") return false;
+  return ["pending", "approved", "rejected", "suspended"].includes(status.toLowerCase().trim());
+};
+
 export const sanitizeString = (val, maxLen = 500) => {
   if (typeof val !== "string") return "";
   return val.trim().slice(0, maxLen);
@@ -38,3 +58,4 @@ export const pickAllowedFields = (obj, allowedKeys = []) => {
   }
   return clean;
 };
+
