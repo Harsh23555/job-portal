@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 /** App configuration and startup environment validation. */
 
 const NODE_ENV = process.env.NODE_ENV || "development";
@@ -24,6 +27,34 @@ function resolveJwtSecret() {
   return secret.trim();
 }
 
+/** Validates admin credentials configuration. */
+function resolveAdminConfig() {
+  const adminEmail = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  const adminPasswordHash = (process.env.ADMIN_PASSWORD_HASH || "").trim();
+
+  if (IS_PRODUCTION) {
+    if (!adminEmail) {
+      console.error("[CONFIG FATAL] ADMIN_EMAIL is required in production.");
+      process.exit(1);
+    }
+    if (!adminPasswordHash || !adminPasswordHash.startsWith("$2")) {
+      console.error("[CONFIG FATAL] ADMIN_PASSWORD_HASH must be a valid bcrypt hash in production.");
+      process.exit(1);
+    }
+  } else {
+    if (!adminEmail) {
+      console.warn("[CONFIG WARNING] ADMIN_EMAIL is not set. Admin login will be unavailable.");
+    }
+    if (!adminPasswordHash) {
+      console.warn("[CONFIG WARNING] ADMIN_PASSWORD_HASH is not set. Admin login will be unavailable.");
+    }
+  }
+
+  return { adminEmail, adminPasswordHash };
+}
+
+const { adminEmail, adminPasswordHash } = resolveAdminConfig();
+
 export const config = {
   nodeEnv: NODE_ENV,
   isProduction: IS_PRODUCTION,
@@ -41,7 +72,6 @@ export const config = {
   smtpPort: parseInt(process.env.SMTP_PORT, 10) || 587,
   smtpUser: process.env.SMTP_USER || "",
   smtpPass: process.env.SMTP_PASS || "",
-
   // ─── Embedding / RAG ────────────────────────────────────────────────────────
   embeddingProvider: process.env.EMBEDDING_PROVIDER || "local",
   embeddingModel: process.env.EMBEDDING_MODEL || "Xenova/all-MiniLM-L6-v2",
@@ -52,5 +82,9 @@ export const config = {
 
   // ─── Remotive ───────────────────────────────────────────────────────────────
   remotiveEnabled: process.env.REMOTIVE_ENABLED !== "false",
+
+  // Admin authentication
+  adminEmail,
+  adminPasswordHash,
 };
 
