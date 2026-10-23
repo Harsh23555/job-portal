@@ -1322,9 +1322,12 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
     }
   }, [activeJob?._id, activeJob?.id]);
 
-  const isJobsTab = activeTab === "Browse Jobs" || activeTab === "Saved";
+  const isJobsTab =
+    (activeTab === "Browse Jobs" || activeTab === "Saved") &&
+    Boolean(savedUser?.profileConfirmed) &&
+    !showOnboarding;
 
-  return <div className={isJobsTab ? "jobs-page-container" : ""} style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: T.bg, color: T.text }}>
+  return <div className={isJobsTab ? "jobs-page-container" : ""} style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: T.bg, color: T.text, overflowY: isJobsTab ? "hidden" : "auto" }}>
       <ApplicantNavbar
         onSignOut={onSignOut}
         activeTab={activeTab}
@@ -1504,15 +1507,25 @@ export function JobPortalApplicantView({ onSignOut, initialJobId = null, onJobCo
                 </div>}
             </div>
   ) : (!savedUser.profileConfirmed || showOnboarding) && activeTab === "Browse Jobs" ? (
-    <CandidateOnboardingWizard
-      user={savedUser}
-      onComplete={(updatedUser) => {
-        localStorage.setItem("user", JSON.stringify(updatedUser));
-        setUserVer((v) => v + 1);
-        setShowOnboarding(false);
-        fetchJobs(true);
+    <div
+      style={{
+        flex: 1,
+        width: "100%",
+        overflowY: "auto",
+        minHeight: "calc(100vh - 64px)",
+        paddingBottom: 80,
       }}
-    />
+    >
+      <CandidateOnboardingWizard
+        user={savedUser}
+        onComplete={(updatedUser) => {
+          localStorage.setItem("user", JSON.stringify(updatedUser));
+          setUserVer((v) => v + 1);
+          setShowOnboarding(false);
+          fetchJobs(true);
+        }}
+      />
+    </div>
   ) : (
     // Browse Jobs & Saved
     <div className="jobs-main-layout" style={{ display: "flex", flex: 1, maxWidth: 1440, width: "100%", margin: "0 auto", height: "calc(100vh - 64px)", minHeight: 0, overflow: "hidden" }}>

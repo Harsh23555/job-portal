@@ -250,8 +250,8 @@ export default function CandidateOnboardingWizard({ user, onComplete }) {
     <div
       style={{
         maxWidth: 860,
-        margin: "40px auto",
-        padding: "0 20px",
+        margin: "24px auto 60px",
+        padding: "0 20px 100px",
         fontFamily: T.font,
         color: T.text,
       }}
