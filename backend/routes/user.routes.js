@@ -16,6 +16,13 @@ import {
   uploadProfileResume,
   getProfileResume,
   deleteProfileResume,
+  confirmCandidateProfile,
+  getCandidateProfile,
+  updateAutoApplyConfig,
+  getAutoApplyConfig,
+  runAutoApplyBatch,
+  revokeConsent,
+  deleteCandidateData,
 } from "../controllers/user.controller.js";
 import isAuthenticated from "../middlewares/isAuthenticated.js";
 import { singleUpload } from "../middlewares/multer.js";
@@ -49,6 +56,31 @@ router.route("/logout").post(logout).get(logout);
 router.route("/me").get(isAuthenticated, getCurrentUser);
 router.route("/profile/update").post(isAuthenticated, updateProfile);
 router.route("/profile/unlink").post(isAuthenticated, unlinkSocialAccount);
+
+// Candidate Profile Confirmation & Retrieval (RAG Job Matching)
+router
+  .route("/profile/confirm")
+  .post(isAuthenticated, authorizeRole("student"), confirmCandidateProfile);
+router
+  .route("/profile/candidate")
+  .get(isAuthenticated, authorizeRole("student"), getCandidateProfile);
+
+// Auto-Apply Configuration and Execution
+router
+  .route("/auto-apply-config")
+  .get(isAuthenticated, authorizeRole("student"), getAutoApplyConfig)
+  .post(isAuthenticated, authorizeRole("student"), updateAutoApplyConfig);
+router
+  .route("/auto-apply/run")
+  .post(isAuthenticated, authorizeRole("student"), runAutoApplyBatch);
+
+// Privacy & Consent Workflows (GDPR)
+router
+  .route("/privacy/revoke-consent")
+  .post(isAuthenticated, authorizeRole("student"), revokeConsent);
+router
+  .route("/privacy/delete-data")
+  .delete(isAuthenticated, authorizeRole("student"), deleteCandidateData);
 
 // Profile resume management (student)
 router

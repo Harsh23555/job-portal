@@ -13,6 +13,11 @@ import emailService from "../services/emailService.js";
 import { saveResumeFile, deleteResumeFile, streamResumeFile } from "../utils/resumeStorage.js";
 import { Application } from "../models/application.model.js";
 import { extractSkills } from "../utils/skillExtractor.js";
+import { embedText, getModelVersion } from "../services/embeddingService.js";
+import { ExternalJobApplication } from "../models/externalJobApplication.model.js";
+import { ExternalJob } from "../models/externalJob.model.js";
+import { matchResumeToJobs } from "../services/resumeMatchService.js";
+import { generateCoverLetter } from "../services/coverLetterService.js";
 
 // OAuth state store
 const oauthStateStore = new Map();
@@ -55,6 +60,13 @@ function buildUserResponse(user) {
     role: user.role,
     profile: user.profile,
   };
+
+  // Include candidate fields for applicant users
+  if (user.role === "student") {
+    response.profileConfirmed = Boolean(user.profileConfirmed);
+    response.candidateProfile = user.candidateProfile || null;
+    response.autoApplyConfig = user.autoApplyConfig || null;
+  }
 
   // Include HR-specific fields for recruiter users
   if (user.role === "recruiter") {
@@ -937,5 +949,524 @@ export const deleteProfileResume = async (req, res) => {
       success: false,
       message: "Internal server error while removing resume.",
     });
+  }
+};
+
+/**
+ * Confirms structured candidate profile after resume upload and user review.
+ * Generates semantic resume embeddings for RAG hybrid matching.
+ * POST /api/v1/user/profile/confirm
+ */
+export const confirmCandidateProfile = async (req, res) => {
+  try {
+    const userId = req.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    const {
+      summary = "",
+      currentTitle = "",
+      skills = [],
+      softSkills = [],
+      experienceYears = 0,
+      experienceDetails = [],
+      education = [],
+      certifications = [],
+      projects = [],
+      preferredJobTitles = [],
+      preferredLocations = [],
+      remotePreference = "any",
+      expectedSalary = null,
+      dataProcessingConsent = false,
+    } = req.body;
+
+    if (!dataProcessingConsent) {
+      return res.status(400).json({
+        success: false,
+        message: "Consent to process your resume and profile data is required to discover matching jobs.",
+      });
+    }
+
+    // Sanitize and deduplicate skills
+    const cleanSkills = Array.isArray(skills)
+      ? [...new Set(skills.map((s) => String(s).trim()).filter(Boolean))].slice(0, 50)
+      : [];
+
+    const cleanSoftSkills = Array.isArray(softSkills)
+      ? [...new Set(softSkills.map((s) => String(s).trim()).filter(Boolean))].slice(0, 30)
+      : [];
+
+    const cleanTitles = Array.isArray(preferredJobTitles)
+      ? preferredJobTitles.map((t) => String(t).trim()).filter(Boolean).slice(0, 10)
+      : [];
+
+    const cleanLocations = Array.isArray(preferredLocations)
+      ? preferredLocations.map((l) => String(l).trim()).filter(Boolean).slice(0, 10)
+      : [];
+
+    user.candidateProfile = {
+      summary: String(summary || "").slice(0, 2000),
+      currentTitle: String(currentTitle || "").slice(0, 120),
+      skills: cleanSkills,
+      softSkills: cleanSoftSkills,
+      experienceYears: Math.max(0, parseFloat(experienceYears) || 0),
+      experienceDetails: Array.isArray(experienceDetails) ? experienceDetails.slice(0, 15) : [],
+      education: Array.isArray(education) ? education.slice(0, 10) : [],
+      certifications: Array.isArray(certifications) ? certifications.map((c) => String(c).trim()).filter(Boolean).slice(0, 15) : [],
+      projects: Array.isArray(projects) ? projects.slice(0, 10) : [],
+      preferredJobTitles: cleanTitles,
+      preferredLocations: cleanLocations,
+      remotePreference: ["any", "remote", "hybrid", "onsite"].includes(remotePreference) ? remotePreference : "any",
+      expectedSalary: expectedSalary ? Math.max(0, parseFloat(expectedSalary)) : null,
+      dataProcessingConsent: true,
+      consentTimestamp: new Date(),
+      confirmedAt: new Date(),
+    };
+
+    user.profileConfirmed = true;
+
+    // Sync profile skills & bio
+    if (!user.profile) user.profile = {};
+    if (cleanSkills.length > 0) user.profile.skills = cleanSkills;
+    if (summary) user.profile.bio = summary.slice(0, 500);
+
+    // Compute semantic embedding of confirmed profile for RAG retrieval
+    const textToEmbed = [
+      user.candidateProfile.currentTitle,
+      user.candidateProfile.summary,
+      cleanSkills.join(", "),
+      `${user.candidateProfile.experienceYears} years experience`,
+      cleanTitles.join(", "),
+    ]
+      .filter(Boolean)
+      .join(". ");
+
+    try {
+      if (textToEmbed.length > 10) {
+        const vector = await embedText(textToEmbed);
+        user.resumeEmbedding = {
+          vector,
+          modelVersion: getModelVersion(),
+          updatedAt: new Date(),
+        };
+      }
+    } catch (embedErr) {
+      console.warn("[confirmCandidateProfile] Embedding generation notice:", embedErr.message);
+    }
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Candidate profile confirmed successfully. Personalized job discovery unlocked!",
+      user: buildUserResponse(user),
+    });
+  } catch (error) {
+    console.error("[confirmCandidateProfile error]:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to confirm candidate profile.",
+    });
+  }
+};
+
+/**
+ * Gets candidate profile and confirmation status.
+ * GET /api/v1/user/profile/candidate
+ */
+export const getCandidateProfile = async (req, res) => {
+  try {
+    const userId = req.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    return res.status(200).json({
+      success: true,
+      profileConfirmed: Boolean(user.profileConfirmed),
+      candidateProfile: user.candidateProfile || null,
+      autoApplyConfig: user.autoApplyConfig || null,
+    });
+  } catch (error) {
+    console.error("[getCandidateProfile error]:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch candidate profile." });
+  }
+};
+
+/**
+ * Updates auto-apply rules and permissions.
+ * POST /api/v1/user/auto-apply-config
+ */
+export const updateAutoApplyConfig = async (req, res) => {
+  try {
+    const userId = req.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    const {
+      enabled = false,
+      minMatchScore = 75,
+      preferredJobTitles = [],
+      allowedLocations = [],
+      minSalary = 0,
+      remotePreference = "any",
+      excludedCompanies = [],
+      maxApplicationsPerDay = 5,
+      isPaused = false,
+      emergencyStop = false,
+      userAuthorized = false,
+    } = req.body;
+
+    user.autoApplyConfig = {
+      enabled: Boolean(enabled),
+      minMatchScore: Math.max(50, Math.min(100, parseInt(minMatchScore, 10) || 75)),
+      preferredJobTitles: Array.isArray(preferredJobTitles)
+        ? preferredJobTitles.map((t) => String(t).trim()).filter(Boolean)
+        : [],
+      allowedLocations: Array.isArray(allowedLocations)
+        ? allowedLocations.map((l) => String(l).trim()).filter(Boolean)
+        : [],
+      minSalary: Math.max(0, parseFloat(minSalary) || 0),
+      remotePreference: ["any", "remote", "hybrid", "onsite"].includes(remotePreference)
+        ? remotePreference
+        : "any",
+      excludedCompanies: Array.isArray(excludedCompanies)
+        ? excludedCompanies.map((c) => String(c).trim().toLowerCase()).filter(Boolean)
+        : [],
+      maxApplicationsPerDay: Math.max(1, Math.min(20, parseInt(maxApplicationsPerDay, 10) || 5)),
+      appliedTodayCount: user.autoApplyConfig?.appliedTodayCount || 0,
+      lastAppliedDate: user.autoApplyConfig?.lastAppliedDate || "",
+      isPaused: Boolean(isPaused),
+      emergencyStop: Boolean(emergencyStop),
+      userAuthorized: Boolean(userAuthorized),
+      authorizationTimestamp: userAuthorized ? new Date() : user.autoApplyConfig?.authorizationTimestamp,
+    };
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Auto-apply settings updated successfully.",
+      autoApplyConfig: user.autoApplyConfig,
+    });
+  } catch (error) {
+    console.error("[updateAutoApplyConfig error]:", error);
+    return res.status(500).json({ success: false, message: "Failed to update auto-apply configuration." });
+  }
+};
+
+/**
+ * Gets current auto-apply settings.
+ * GET /api/v1/user/auto-apply-config
+ */
+export const getAutoApplyConfig = async (req, res) => {
+  try {
+    const userId = req.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+
+    const user = await User.findById(userId).lean();
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    return res.status(200).json({
+      success: true,
+      autoApplyConfig: user.autoApplyConfig || null,
+    });
+  } catch (error) {
+    console.error("[getAutoApplyConfig error]:", error);
+    return res.status(500).json({ success: false, message: "Failed to retrieve auto-apply settings." });
+  }
+};
+
+/**
+ * Runs controlled auto-apply batch for eligible jobs based on user rules.
+ * POST /api/v1/user/auto-apply/run
+ */
+export const runAutoApplyBatch = async (req, res) => {
+  try {
+    const userId = req.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    if (!user.profileConfirmed) {
+      return res.status(400).json({
+        success: false,
+        message: "You must confirm your candidate profile before running auto-apply.",
+      });
+    }
+
+    const config = user.autoApplyConfig || {};
+    if (!config.enabled) {
+      return res.status(400).json({
+        success: false,
+        message: "Auto-apply mode is currently disabled in your settings.",
+      });
+    }
+
+    if (config.emergencyStop) {
+      return res.status(400).json({
+        success: false,
+        message: "Emergency stop is active. Reset emergency stop in settings to resume.",
+      });
+    }
+
+    if (config.isPaused) {
+      return res.status(400).json({
+        success: false,
+        message: "Auto-apply is currently paused.",
+      });
+    }
+
+    // Reset daily counter if a new calendar day has arrived
+    const today = new Date().toISOString().slice(0, 10);
+    if (config.lastAppliedDate !== today) {
+      config.appliedTodayCount = 0;
+      config.lastAppliedDate = today;
+    }
+
+    const remainingSlots = Math.max(0, (config.maxApplicationsPerDay || 5) - (config.appliedTodayCount || 0));
+    if (remainingSlots <= 0) {
+      return res.status(200).json({
+        success: true,
+        message: `Daily application limit reached (${config.maxApplicationsPerDay} applications today).`,
+        appliedCount: 0,
+        appliedJobs: [],
+      });
+    }
+
+    // Fetch candidate-matched jobs
+    const matchResult = await matchResumeToJobs(userId, { topK: 25 });
+    const eligibleJobs = [];
+
+    const excluded = new Set((config.excludedCompanies || []).map((c) => c.toLowerCase()));
+
+    for (const job of matchResult.jobs) {
+      if (eligibleJobs.length >= remainingSlots) break;
+
+      // Filter by min match score
+      if ((job.matchScore || 0) < (config.minMatchScore || 75)) continue;
+
+      // Filter excluded companies
+      const compName = (job.companyName || "").toLowerCase();
+      if (excluded.has(compName)) continue;
+
+      // Filter remote preference
+      if (config.remotePreference === "remote" && !job.isRemote) continue;
+
+      // Check if already applied in ExternalJobApplication
+      const alreadyApplied = await ExternalJobApplication.exists({
+        userId,
+        $or: [
+          { externalJobId: job._id },
+          { "jobSnapshot.title": job.title, "jobSnapshot.companyName": job.companyName },
+        ],
+      });
+
+      if (!alreadyApplied) {
+        eligibleJobs.push(job);
+      }
+    }
+
+    if (eligibleJobs.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No new eligible vacancies found matching your auto-apply threshold today.",
+        appliedCount: 0,
+        appliedJobs: [],
+      });
+    }
+
+    const appliedJobs = [];
+    const latestAnalysis = await ResumeAnalysis.findOne({ userId }).sort({ createdAt: -1 });
+
+    for (const job of eligibleJobs) {
+      try {
+        // Generate tailored cover letter grounded strictly in candidate profile
+        const coverLetterRes = await generateCoverLetter(user, job, latestAnalysis?.analysis || null);
+
+        const app = await ExternalJobApplication.create({
+          userId,
+          externalJobId: job._id,
+          jobSnapshot: {
+            title: job.title,
+            companyName: job.companyName || "",
+            location: job.location || "",
+            jobType: job.jobType || "",
+            salaryDisplay: job.salaryDisplay || "",
+            provider: job.sourceProvider || "JobSphere",
+            externalUrl: job.externalUrl || job.applyUrl || "",
+            skills: job.skills || [],
+            isRemote: Boolean(job.isRemote),
+            description: (job.description || "").slice(0, 2000),
+          },
+          coverLetter: coverLetterRes.coverLetter || "",
+          applicantDetails: {
+            fullname: user.fullname,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            yearsOfExperience: String(user.candidateProfile?.experienceYears || ""),
+            skills: user.candidateProfile?.skills || [],
+          },
+          atsScore: job.matchScore || null,
+          status: "submitted",
+          statusNotes: `Auto-applied based on match score of ${job.matchScore}%.`,
+          aiAssisted: true,
+          aiModel: coverLetterRes.model || "groq-rag-coverletter",
+        });
+
+        appliedJobs.push({
+          id: app._id,
+          title: job.title,
+          company: job.companyName,
+          matchScore: job.matchScore,
+        });
+
+        config.appliedTodayCount += 1;
+      } catch (applyErr) {
+        console.warn(`[runAutoApplyBatch] Failed to auto-apply for job "${job.title}":`, applyErr.message);
+      }
+    }
+
+    user.autoApplyConfig = config;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully auto-applied to ${appliedJobs.length} matching job(s).`,
+      appliedCount: appliedJobs.length,
+      appliedJobs,
+      appliedTodayCount: config.appliedTodayCount,
+      dailyLimit: config.maxApplicationsPerDay,
+    });
+  } catch (error) {
+    console.error("[runAutoApplyBatch error]:", error);
+    return res.status(500).json({ success: false, message: "Auto-apply execution encountered an error." });
+  }
+};
+
+/**
+ * Revokes consent for data processing and disables recommendations.
+ * POST /api/v1/user/privacy/revoke-consent
+ */
+export const revokeConsent = async (req, res) => {
+  try {
+    const userId = req.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    if (user.candidateProfile) {
+      user.candidateProfile.dataProcessingConsent = false;
+      user.candidateProfile.consentTimestamp = null;
+    }
+    user.profileConfirmed = false;
+    user.resumeEmbedding = undefined;
+
+    if (user.autoApplyConfig) {
+      user.autoApplyConfig.enabled = false;
+    }
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Data processing consent has been revoked. Job matching is paused.",
+      user: buildUserResponse(user),
+    });
+  } catch (error) {
+    console.error("[revokeConsent error]:", error);
+    return res.status(500).json({ success: false, message: "Failed to revoke consent." });
+  }
+};
+
+/**
+ * Permanently deletes candidate resume, embeddings, and profile data (GDPR Right to Erasure).
+ * DELETE /api/v1/user/privacy/delete-data
+ */
+export const deleteCandidateData = async (req, res) => {
+  try {
+    const userId = req.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    // Physically delete uploaded resume file if not referenced
+    const fileId = user.profile?.resumeMetadata?.fileId;
+    const storageKey = user.profile?.resumeMetadata?.storageKey || user.profile?.resume;
+    if (fileId && storageKey) {
+      try {
+        const isReferenced = await Application.exists({ "resume.fileId": fileId });
+        if (!isReferenced) {
+          await deleteResumeFile(storageKey);
+        }
+      } catch (cleanErr) {
+        console.warn("[deleteCandidateData] File cleanup notice:", cleanErr.message);
+      }
+    }
+
+    // Remove analysis records
+    await ResumeAnalysis.deleteMany({ userId });
+
+    // Clear candidate data from user record
+    user.profileConfirmed = false;
+    user.candidateProfile = undefined;
+    user.resumeEmbedding = undefined;
+    if (user.autoApplyConfig) {
+      user.autoApplyConfig.enabled = false;
+    }
+    if (user.profile) {
+      user.profile.resume = null;
+      user.profile.resumeOriginalName = null;
+      user.profile.resumeMetadata = undefined;
+      user.profile.skills = [];
+      user.profile.bio = "";
+    }
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "All candidate profile data, resumes, and embeddings have been permanently deleted.",
+      user: buildUserResponse(user),
+    });
+  } catch (error) {
+    console.error("[deleteCandidateData error]:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete candidate data." });
   }
 };
