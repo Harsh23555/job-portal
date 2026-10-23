@@ -287,7 +287,7 @@ export default function ExternalApplyModal({ job, onClose, onSuccess, user, atsS
     };
 
     fillAndTransition();
-  }, [job?._id]);
+  }, [jobId]);
 
   // ── Step 2: Submit ──────────────────────────────────────────────────────────
   const handleSubmit = async () => {
