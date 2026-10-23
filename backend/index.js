@@ -1,7 +1,7 @@
+import "dotenv/config";
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import dotenv from "dotenv";
 import crypto from "crypto";
 import connectDB from "./utils/db.js";
 import { config } from "./utils/config.js";
@@ -13,11 +13,10 @@ import jobRoute from "./routes/job.route.js";
 import applicationRoute from "./routes/application.route.js";
 import externalJobRoute from "./routes/externalJob.route.js";
 import savedJobRoute from "./routes/savedJob.route.js";
+import hrRoute from "./routes/hr.route.js";
 import adminRoute from "./routes/admin.route.js";
 import { scheduleSyncLoop } from "./services/externalJobSync.js";
 import { startEmbeddingScheduler } from "./services/embeddingScheduler.js";
-
-dotenv.config({});
 
 const app = express();
 
@@ -103,6 +102,7 @@ app.use("/api/v1/job", jobRoute);
 app.use("/api/v1/application", applicationRoute);
 app.use("/api/v1/external-jobs", externalJobRoute);
 app.use("/api/jobs", externalJobRoute);
+app.use("/api/v1/hr", hrRoute);
 app.use("/api/v1/saved-jobs", savedJobRoute);
 app.use("/api/v1/admin", adminRoute);
 
@@ -120,13 +120,17 @@ app.use(errorHandler);
 // Start server
 const PORT = config.port;
 if (process.env.NODE_ENV !== "test") {
-  connectDB().then(() => {
+  connectDB().then((connected) => {
     app.listen(PORT, () => {
       console.log(`Server running at port ${PORT}`);
-      // Background external job synchronization
-      scheduleSyncLoop();
-      // Background embedding scheduler
-      startEmbeddingScheduler();
+      if (connected) {
+        // Background external job synchronization
+        scheduleSyncLoop();
+        // Background embedding scheduler
+        startEmbeddingScheduler();
+      } else {
+        console.warn("[externalJobSync] Skipping background tasks because database is not connected.");
+      }
     });
   });
 }
