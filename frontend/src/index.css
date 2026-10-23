@@ -1,0 +1,355 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
+@import 'tailwindcss';
+
+/* stylelint-disable-next-line at-rule-no-unknown */
+@theme {
+  --color-background: var(--color-background);
+  --color-foreground: var(--color-foreground);
+  --color-card: var(--color-card);
+  --color-card-foreground: var(--color-card-foreground);
+  --color-primary: #7c6af7;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--color-secondary);
+  --color-secondary-foreground: var(--color-secondary-foreground);
+  --color-muted: var(--color-muted);
+  --color-muted-foreground: var(--color-muted-foreground);
+  --color-accent: #4ade80;
+  --color-accent-foreground: #0a0a0f;
+  --color-border: var(--color-border);
+  --color-ring: #7c6af7;
+  --radius: 0.75rem;
+  --font-sans: 'DM Sans', sans-serif;
+  --font-serif: 'DM Serif Display', serif;
+}
+
+:root,
+html.dark,
+[data-theme="dark"] {
+  --color-background: #09090f;
+  --color-foreground: #e8e8f0;
+  --color-card: #111120;
+  --color-card-foreground: #e8e8f0;
+  --color-secondary: #1a1a2e;
+  --color-secondary-foreground: #a0a0c0;
+  --color-muted: #1e1e30;
+  --color-muted-foreground: #6b6b90;
+  --color-border: rgba(255,255,255,0.08);
+  --app-bg: #09090f;
+  --app-surface: rgba(255,255,255,0.04);
+  --app-surface-hov: rgba(255,255,255,0.07);
+  --app-border: rgba(255,255,255,0.08);
+  --app-text: #f0f0fa;
+  --app-text-mid: #9090b8;
+  --app-text-dim: #5a5a80;
+  --app-card-shadow: none;
+}
+
+html.light,
+[data-theme="light"] {
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #475569;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-border: #e2e8f0;
+  --app-bg: #f8fafc;
+  --app-surface: #ffffff;
+  --app-surface-hov: #f1f5f9;
+  --app-border: #e2e8f0;
+  --app-text: #0f172a;
+  --app-text-mid: #475569;
+  --app-text-dim: #64748b;
+  --app-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.15s ease;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 100px #1a1a2e inset;
+  -webkit-text-fill-color: #e8e8f0;
+  caret-color: #e8e8f0;
+}
+
+html.light input:-webkit-autofill,
+html.light input:-webkit-autofill:hover,
+html.light input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 100px #ffffff inset;
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #0f172a;
+}
+
+html.light .glass-card {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02) !important;
+}
+
+html.light .glass-card-hover:hover {
+  background: #ffffff !important;
+  border-color: rgba(109, 90, 230, 0.35) !important;
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Disable spinner arrows on input type=number */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+  -webkit-appearance: none; 
+  margin: 0; 
+}
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Hide scrollbars */
+*,
+*::-webkit-scrollbar,
+::-webkit-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background: transparent !important;
+  display: none !important;
+}
+
+/* Firefox */
+html,
+body,
+#root,
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+/* Browse Jobs Layout */
+@media (min-width: 768px) {
+  .jobs-page-container {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+  }
+  .jobs-motion-container {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .jobs-main-layout {
+    display: flex !important;
+    flex-direction: row !important;
+    height: calc(100vh - 64px) !important;
+    max-height: calc(100vh - 64px) !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .jobs-left-panel {
+    flex: 0 0 40% !important;
+    min-width: 380px !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+  .jobs-right-panel {
+    flex: 1 1 60% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .jobs-page-container {
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow: visible !important;
+  }
+  .jobs-motion-container {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .jobs-main-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .jobs-left-panel {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    overflow-y: visible !important;
+  }
+  .jobs-right-panel {
+    width: 100% !important;
+    height: auto !important;
+    overflow-y: visible !important;
+  }
+}
+
+/* Navbar */
+.nav-mobile-toggle {
+  display: none !important;
+}
+
+@media (max-width: 1023px) {
+  .nav-mobile-toggle {
+    display: flex !important;
+  }
+  .nav-desktop-group {
+    display: none !important;
+  }
+}
+
+/* Carousel Marquee */
+.infinite-carousel-container {
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+  display: flex;
+  mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+  padding: 8px 0 16px;
+}
+
+.infinite-carousel-track {
+  display: flex;
+  width: max-content;
+  user-select: none;
+}
+
+.infinite-carousel-group {
+  display: flex;
+  flex-shrink: 0;
+  gap: 14px;
+  padding-right: 14px;
+  animation: infiniteCarouselScroll 34s linear infinite;
+  will-change: transform;
+}
+
+.infinite-carousel-container:hover .infinite-carousel-group {
+  animation-play-state: paused;
+}
+
+@keyframes infiniteCarouselScroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+/* Jobs Grid */
+.jobs-card-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 20px !important;
+  width: 100% !important;
+}
+
+@media (max-width: 1024px) {
+  .jobs-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 16px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .jobs-card-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+.job-card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  min-height: 2.5rem;
+  max-height: 2.5rem;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+.job-card-tags {
+  min-height: 52px;
+  max-height: 52px;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-content: flex-start;
+  margin-bottom: 16px;
+}
+
+.job-card-tag-pill {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-card-actions {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding-top: 14px;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+
