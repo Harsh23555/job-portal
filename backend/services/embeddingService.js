@@ -89,6 +89,12 @@ export async function embedText(text) {
     throw new Error("[EmbeddingService] embedText requires a non-empty string.");
   }
 
+  // "none" provider — embeddings disabled (e.g. Vercel serverless environment)
+  if (EMBEDDING_PROVIDER === "none") {
+    console.warn("[EmbeddingService] EMBEDDING_PROVIDER=none — skipping embedding.");
+    return null;
+  }
+
   const trimmed = text.trim().slice(0, 4096); // cap input
 
   if (EMBEDDING_PROVIDER === "openai") {
