@@ -67,9 +67,18 @@ const envOrigins = config.clientOrigin
   : [];
 const allowedOrigins = Array.from(new Set([...defaultOrigins, ...envOrigins]));
 
+// Allow all Vercel preview deployments for this project automatically
+// (covers job-portal-<hash>-harsh-rajs-projects-<id>.vercel.app pattern)
+const VERCEL_PREVIEW_PATTERN = /^https:\/\/job-portal-.*\.vercel\.app$/;
+const VERCEL_PROD_PATTERN = /^https:\/\/ai--job-portal.*\.vercel\.app$/;
+
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow all Vercel preview & production URLs for this project
+    if (origin && (VERCEL_PREVIEW_PATTERN.test(origin) || VERCEL_PROD_PATTERN.test(origin))) {
+      return callback(null, true);
+    }
     if (config.nodeEnv !== "production" && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }

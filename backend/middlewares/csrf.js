@@ -87,7 +87,13 @@ export function csrfProtection(req, res, next) {
     requestOrigin &&
     /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin);
 
-  if (requestOrigin && (allowedOrigins.includes(requestOrigin) || isDevOrigin)) return next();
+  // Allow all Vercel preview & production deployments for this project
+  const isVercelOrigin =
+    requestOrigin &&
+    (/^https:\/\/job-portal-.*\.vercel\.app$/.test(requestOrigin) ||
+      /^https:\/\/ai--job-portal.*\.vercel\.app$/.test(requestOrigin));
+
+  if (requestOrigin && (allowedOrigins.includes(requestOrigin) || isDevOrigin || isVercelOrigin)) return next();
 
   if (!cookieToken || !headerToken) {
     return res.status(403).json({ success: false, message: "CSRF token missing. Please refresh the page and try again." });

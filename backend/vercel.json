@@ -5,7 +5,16 @@
       "src": "index.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["utils/**", "models/**", "controllers/**", "middlewares/**", "routes/**", "services/**", "providers/**"],
+        "includeFiles": [
+          "utils/**",
+          "models/**",
+          "controllers/**",
+          "middlewares/**",
+          "routes/**",
+          "services/**",
+          "providers/**",
+          "storage/**"
+        ],
         "maxDuration": 30
       }
     }
